@@ -1,0 +1,13 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="denuelFavicon" x1="8" y1="6" x2="56" y2="58" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0F766E"/>
+      <stop offset="1" stop-color="#22C55E"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="56" height="56" rx="18" fill="url(#denuelFavicon)"/>
+  <path d="M16 24C16 17.3726 21.3726 12 28 12H40C46.6274 12 52 17.3726 52 24V32C52 38.6274 46.6274 44 40 44H31L20 53V44C17.7909 44 16 42.2091 16 40V24Z" fill="white"/>
+  <circle cx="28" cy="28" r="3" fill="#0F766E"/>
+  <circle cx="34" cy="28" r="3" fill="#0F766E"/>
+  <circle cx="40" cy="28" r="3" fill="#0F766E"/>
+</svg>

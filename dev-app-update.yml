@@ -1,0 +1,4 @@
+owner: your-org
+repo: denuel-chat-desktop
+provider: github
+vPrefixedTagName: false
