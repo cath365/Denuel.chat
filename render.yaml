@@ -1,0 +1,73 @@
+services:
+  - type: pserv
+    name: denuel-mongo
+    runtime: docker
+    repo: https://github.com/cath365/Denuel.chat.git
+    branch: main
+    plan: starter
+    region: oregon
+    dockerfilePath: ./deploy/render/mongo/Dockerfile
+    dockerContext: .
+    autoDeployTrigger: commit
+    disk:
+      name: mongo-data
+      mountPath: /data/db
+      sizeGB: 10
+    envVars:
+      - key: MONGO_DBPATH
+        value: /data/db
+      - key: MONGO_PORT
+        value: "27017"
+      - key: MONGO_REPLICA_SET
+        value: rs0
+      - key: MONGO_ADVERTISED_HOST
+        value: denuel-mongo
+
+  - type: web
+    name: denuel-chat
+    runtime: docker
+    repo: https://github.com/cath365/Denuel.chat.git
+    branch: main
+    plan: starter
+    region: oregon
+    dockerfilePath: ./deploy/render/rocketchat/Dockerfile
+    dockerContext: .
+    autoDeployTrigger: commit
+    healthCheckPath: /api/info
+    domains:
+      - chat.denuelchat.com
+    envVars:
+      - key: ROOT_URL
+        value: https://chat.denuelchat.com
+      - key: PORT
+        value: "10000"
+      - key: BRAND_NAME
+        value: Denuel Chat
+      - key: INITIAL_USER
+        value: "yes"
+      - key: ADMIN_USERNAME
+        value: admin
+      - key: ADMIN_NAME
+        value: Denuel Admin
+      - key: ADMIN_EMAIL
+        value: admin@denuelchat.com
+      - key: ADMIN_PASS
+        sync: false
+      - key: RC_ADMIN_USER
+        value: admin
+      - key: RC_ADMIN_PASSWORD
+        sync: false
+      - key: MONGO_HOST
+        fromService:
+          type: pserv
+          name: denuel-mongo
+          property: host
+      - key: MONGO_PORT
+        fromService:
+          type: pserv
+          name: denuel-mongo
+          property: port
+      - key: MONGO_DB_NAME
+        value: rocketchat
+      - key: MONGO_REPLICA_SET
+        value: rs0

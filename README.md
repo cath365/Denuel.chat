@@ -4,19 +4,22 @@ Denuel Chat is a white-labeled Rocket.Chat deployment with:
 
 - Rocket.Chat backend at `https://chat.denuelchat.com`
 - Next.js frontend at `https://app.denuelchat.com`
-- DigitalOcean Droplet hosting for the backend
+- Render or DigitalOcean hosting for the backend
 - Docker Compose for Rocket.Chat and MongoDB
-- host-level Nginx + Let's Encrypt for HTTPS and WebSocket proxying
+- Render Blueprint support for managed public edge deployment
+- host-level Nginx + Let's Encrypt for self-hosted VPS deployment
 
 ## Key files
 
 - `docker-compose.yml`: production backend services
+- `render.yaml`: Render Blueprint for Rocket.Chat + MongoDB
 - `.env.example`: backend environment variables
 - `deploy/nginx/chat.denuelchat.com.http.conf`: initial HTTP Nginx bootstrap config
 - `deploy/nginx/chat.denuelchat.com.conf`: final HTTPS Nginx production config
 - `deploy/scripts/apply-branding.sh`: applies the Denuel Chat site name and assets
 - `frontend/.env.example`: Vercel and local frontend variables
 - `DEPLOYMENT.md`: full DigitalOcean, DNS, firewall, SSL, and Vercel steps
+- `RENDER_DEPLOYMENT.md`: full Render + Vercel deployment steps
 
 ## Fast path
 
@@ -32,6 +35,14 @@ docker compose up -d
 
 4. Install host Nginx and Certbot, then use the configs in `deploy/nginx/`.
 5. Point `app.denuelchat.com` to Vercel and deploy the `frontend/` project.
+
+## Render path
+
+If you prefer Render instead of a VPS:
+
+1. Create a Blueprint from this repo on Render.
+2. Let Render provision the `denuel-chat` web service and `denuel-mongo` private service from `render.yaml`.
+3. Follow [RENDER_DEPLOYMENT.md](./RENDER_DEPLOYMENT.md).
 
 ## Frontend environment
 
