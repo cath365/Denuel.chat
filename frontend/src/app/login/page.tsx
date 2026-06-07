@@ -12,7 +12,8 @@ export default function LoginPage() {
             Sign in to Denuel Chat
           </h1>
           <p className='subtitle'>
-            This page exchanges credentials with Rocket.Chat over HTTPS and
+            This page exchanges credentials with the Denuel Chat backend over
+            HTTPS and
             stores the returned auth token in a secure `httpOnly` cookie.
           </p>
           <div style={{ marginTop: 24 }}>
@@ -28,7 +29,7 @@ export default function LoginPage() {
             </div>
             <div className='meta-item'>
               <strong>Backend auth</strong>
-              <div>Rocket.Chat REST `/api/v1/login`</div>
+              <div>Denuel Chat REST `/api/v1/login`</div>
             </div>
             <div className='meta-item'>
               <strong>After login</strong>

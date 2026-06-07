@@ -11,7 +11,7 @@ if ! command -v jq >/dev/null 2>&1; then
   exit 1
 fi
 
-ROOT_URL="${ROOT_URL:-http://localhost:3000}"
+ROOT_URL="${ROOT_URL:-https://chat.denuelchat.com}"
 BRAND_NAME="${BRAND_NAME:-Denuel Chat}"
 RC_ADMIN_USER="${RC_ADMIN_USER:-admin}"
 RC_ADMIN_PASSWORD="${RC_ADMIN_PASSWORD:-}"
@@ -44,6 +44,13 @@ curl -sS -X POST \
   -H 'Content-Type: application/json' \
   -d "{\"value\":\"${BRAND_NAME}\"}" \
   "${ROOT_URL}/api/v1/settings/Site_Name" >/dev/null
+
+curl -sS -X POST \
+  -H "X-Auth-Token: ${AUTH_TOKEN}" \
+  -H "X-User-Id: ${USER_ID}" \
+  -H 'Content-Type: application/json' \
+  -d "{\"value\":\"${ROOT_URL}\"}" \
+  "${ROOT_URL}/api/v1/settings/Site_Url" >/dev/null
 
 curl -sS -X POST \
   -H "X-Auth-Token: ${AUTH_TOKEN}" \

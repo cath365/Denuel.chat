@@ -12,8 +12,9 @@ export default function HomePage() {
             {env.appName}
           </h1>
           <p className='subtitle'>
-            A Vercel-ready frontend that authenticates against Rocket.Chat over
-            REST and keeps a realtime WebSocket session open for live updates.
+            A Vercel-ready frontend that authenticates against the Denuel Chat
+            backend over REST and keeps a realtime WebSocket session open for
+            live updates.
           </p>
           <div style={{ marginTop: 24, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
             <Link className='button' href='/login'>
@@ -29,7 +30,11 @@ export default function HomePage() {
           <div className='meta'>
             <div className='meta-item'>
               <strong>Backend</strong>
-              <div>{env.rocketChatUrl}</div>
+              <div>{env.chatApiUrl}</div>
+            </div>
+            <div className='meta-item'>
+              <strong>Frontend</strong>
+              <div>{env.appUrl}</div>
             </div>
             <div className='meta-item'>
               <strong>WebSocket</strong>

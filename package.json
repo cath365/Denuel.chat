@@ -9,7 +9,7 @@
   "version": "4.1.2",
   "author": "Denuel Chat",
   "copyright": "(c) 2016-2026, Denuel Chat",
-  "homepage": "https://chat.example.com",
+  "homepage": "https://chat.denuelchat.com",
   "license": "MIT",
   "goUrlShortener": "go.rocket.chat",
   "keywords": [
@@ -19,10 +19,10 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/your-org/denuel-chat-desktop.git"
+    "url": "git+https://github.com/cath365/Denuel.chat.git"
   },
   "bugs": {
-    "url": "https://github.com/your-org/denuel-chat-desktop/issues"
+    "url": "https://github.com/cath365/Denuel.chat/issues"
   },
   "main": "app/main.js",
   "scripts": {

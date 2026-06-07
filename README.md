@@ -1,49 +1,61 @@
 # Denuel Chat
 
-Denuel Chat is a rebranded Rocket.Chat deployment kit with:
+Denuel Chat is a white-labeled Rocket.Chat deployment with:
 
-- a white-labeled desktop client in this repository
-- a production-ready Docker backend for Rocket.Chat + MongoDB
-- an optional Next.js frontend scaffold for Vercel
+- Rocket.Chat backend at `https://chat.denuelchat.com`
+- Next.js frontend at `https://app.denuelchat.com`
+- DigitalOcean Droplet hosting for the backend
+- Docker Compose for Rocket.Chat and MongoDB
+- host-level Nginx + Let's Encrypt for HTTPS and WebSocket proxying
 
-## What is in this repo
+## Key files
 
-- `docker-compose.yml`: Rocket.Chat, MongoDB replica set bootstrap, and optional Nginx edge
-- `.env.example`: backend environment template
-- `deploy/`: Mongo, branding, Nginx, and deployment helper scripts
-- `frontend/`: optional Next.js frontend for Vercel
-- `src/`: Electron desktop client branding updates
+- `docker-compose.yml`: production backend services
+- `.env.example`: backend environment variables
+- `deploy/nginx/chat.denuelchat.com.http.conf`: initial HTTP Nginx bootstrap config
+- `deploy/nginx/chat.denuelchat.com.conf`: final HTTPS Nginx production config
+- `deploy/scripts/apply-branding.sh`: applies the Denuel Chat site name and assets
+- `frontend/.env.example`: Vercel and local frontend variables
+- `DEPLOYMENT.md`: full DigitalOcean, DNS, firewall, SSL, and Vercel steps
 
-## Quick start
+## Fast path
 
-1. Copy the environment file:
+1. Provision an Ubuntu 22.04 DigitalOcean Droplet.
+2. Point `chat.denuelchat.com` to the Droplet IP.
+3. Deploy the backend stack:
 
 ```bash
 cp .env.example .env
+docker compose pull
+docker compose up -d
 ```
 
-2. Start the local backend:
+4. Install host Nginx and Certbot, then use the configs in `deploy/nginx/`.
+5. Point `app.denuelchat.com` to Vercel and deploy the `frontend/` project.
+
+## Frontend environment
+
+The Next.js frontend uses:
 
 ```bash
-docker compose up -d mongo mongo-init-replica rocketchat
+NEXT_PUBLIC_CHAT_API=https://chat.denuelchat.com
 ```
 
-3. Open Rocket.Chat at `http://localhost:3000`
+The full frontend environment template is in `frontend/.env.example`.
 
-4. Apply the Denuel Chat brand assets after creating the admin user:
+## Backend environment
+
+The backend keeps the base connection URI simple in `.env`:
 
 ```bash
-bash deploy/scripts/apply-branding.sh
+ROOT_URL=https://chat.denuelchat.com
+MONGO_URL=mongodb://mongo:27017/rocketchat
+PORT=3000
 ```
 
-5. If you want the optional Vercel frontend:
+The Docker Compose file appends the single-node replica set parameter for the
+production-safe Rocket.Chat runtime.
 
-```bash
-cd frontend
-npm install
-npm run dev
-```
+## Production guide
 
-## Production docs
-
-Deployment and hosting instructions live in [DEPLOYMENT.md](./DEPLOYMENT.md).
+Use [DEPLOYMENT.md](./DEPLOYMENT.md) for the exact step-by-step commands.

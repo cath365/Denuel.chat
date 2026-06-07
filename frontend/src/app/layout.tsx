@@ -17,7 +17,7 @@ const body = IBM_Plex_Sans({
 
 export const metadata: Metadata = {
   title: env.appName,
-  description: `${env.appName} frontend for Rocket.Chat`,
+  description: `${env.appName} secure messaging frontend`,
 };
 
 export default function RootLayout({

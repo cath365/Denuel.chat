@@ -1,7 +1,7 @@
 // This module contains all the urls used in the app
 
 export const rocketchat = {
-  site: 'https://chat.example.com',
+  site: 'https://chat.denuelchat.com',
   subdomain: <T extends string>(subdomain: T) =>
     `https://${subdomain}.rocket.chat` as const,
 } as const;
@@ -36,5 +36,5 @@ export const server = <T extends string>(serverUrl: T) =>
 export const docs = {
   index: 'https://docs.rocket.chat/', // TODO: should it be a go link?
   supportedVersions: 'https://go.rocket.chat/i/supported-versions',
-  newIssue: 'https://github.com/your-org/denuel-chat-desktop/issues/new',
+  newIssue: 'https://github.com/cath365/Denuel.chat/issues/new',
 } as const;

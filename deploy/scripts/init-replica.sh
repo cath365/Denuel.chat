@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-MONGO_URI="mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@mongo:27017/admin"
+MONGO_URI="mongodb://mongo:27017/admin"
 
 until mongosh "$MONGO_URI" --quiet --eval "db.adminCommand('ping').ok" >/dev/null 2>&1; do
   sleep 2

@@ -21,7 +21,7 @@ export async function POST(request: Request) {
 
   if (!response.ok || payload?.status !== 'success') {
     return NextResponse.json(
-      { error: payload?.error || 'Unable to authenticate with Rocket.Chat' },
+      { error: payload?.error || 'Unable to authenticate with Denuel Chat' },
       { status: 401 }
     );
   }

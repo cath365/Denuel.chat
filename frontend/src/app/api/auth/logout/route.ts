@@ -13,7 +13,7 @@ export async function POST() {
     try {
       const session = JSON.parse(sessionCookie) as SessionPayload;
 
-      await fetch(`${rocketChat.loginUrl.replace('/login', '/logout')}`, {
+      await fetch(rocketChat.logoutUrl, {
         method: 'POST',
         headers: {
           'X-Auth-Token': session.authToken,
