@@ -21,6 +21,10 @@ This frontend is now a custom Firebase-powered chat app.
 - emoji reactions
 - pinned messages
 - message editing and soft delete
+- threaded replies
+- channel member roles
+- in-app notifications
+- email invitation flow
 - file and image attachments
 - searchable workspace navigation
 

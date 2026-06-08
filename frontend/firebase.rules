@@ -19,6 +19,7 @@ service cloud.firestore {
         'lastMessageSenderId',
         'memberIds',
         'memberNames',
+        'memberRoles',
         'unreadCounts'
       ]);
     }
@@ -45,6 +46,9 @@ service cloud.firestore {
         'pinnedAt',
         'pinnedById',
         'pinnedByName',
+        'parentMessageId',
+        'parentMessagePreview',
+        'parentMessageSenderName',
         'reactions'
       ]);
     }
@@ -62,6 +66,35 @@ service cloud.firestore {
         'displayName',
         'isTyping',
         'updatedAt'
+      ]);
+    }
+
+    function isNotificationPayload() {
+      return request.resource.data.keys().hasOnly([
+        'type',
+        'recipientId',
+        'actorId',
+        'actorName',
+        'roomId',
+        'roomName',
+        'messageId',
+        'text',
+        'isRead',
+        'createdAt'
+      ]);
+    }
+
+    function isInvitePayload() {
+      return request.resource.data.keys().hasOnly([
+        'roomId',
+        'roomName',
+        'email',
+        'role',
+        'status',
+        'invitedById',
+        'invitedByName',
+        'createdAt',
+        'acceptedAt'
       ]);
     }
 
@@ -106,9 +139,43 @@ service cloud.firestore {
         ]);
     }
 
+    function signedInEmail() {
+      return request.auth.token.email;
+    }
+
     match /users/{userId} {
       allow read: if isSignedIn();
       allow create, update: if isSignedIn() && request.auth.uid == userId;
+    }
+
+    match /notifications/{notificationId} {
+      allow read: if isSignedIn() && resource.data.recipientId == request.auth.uid;
+      allow create: if isSignedIn() &&
+        request.resource.data.actorId == request.auth.uid &&
+        request.resource.data.recipientId is string &&
+        request.resource.data.isRead == false &&
+        isNotificationPayload();
+      allow update: if isSignedIn() &&
+        resource.data.recipientId == request.auth.uid &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead']);
+    }
+
+    match /invites/{inviteId} {
+      allow read: if isSignedIn() &&
+        (
+          resource.data.invitedById == request.auth.uid ||
+          resource.data.email == signedInEmail()
+        );
+      allow create: if isSignedIn() &&
+        request.resource.data.invitedById == request.auth.uid &&
+        request.resource.data.status == 'pending' &&
+        isInvitePayload();
+      allow update: if isSignedIn() &&
+        isInvitePayload() &&
+        (
+          resource.data.invitedById == request.auth.uid ||
+          resource.data.email == signedInEmail()
+        );
     }
 
     match /rooms/{roomId} {

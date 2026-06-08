@@ -44,8 +44,8 @@ export default function HomePage() {
               <span>Show identity, status, and availability in a calmer team directory.</span>
             </div>
             <div className='home-kpi'>
-              <strong>Pins + message controls</strong>
-              <span>Save the important updates and keep conversations tidy as work evolves.</span>
+              <strong>Threads + roles + invites</strong>
+              <span>Reply in context, manage trusted helpers, and invite teammates by email.</span>
             </div>
           </div>
         </section>
@@ -75,7 +75,7 @@ export default function HomePage() {
               <div className='showcase-card'>
                 <strong>Daily flow</strong>
                 <div>Unread counts keep priorities visible.</div>
-                <div>Pinned updates and edits keep context easy to trust.</div>
+                <div>Pinned updates, threads, and room roles keep context easy to trust.</div>
               </div>
             </div>
 

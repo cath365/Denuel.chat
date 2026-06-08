@@ -47,6 +47,7 @@ a {
 
 button,
 input,
+select,
 textarea {
   font: inherit;
 }
@@ -616,6 +617,19 @@ textarea {
   flex-wrap: wrap;
 }
 
+.button-badge {
+  display: inline-grid;
+  place-items: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: rgba(217, 191, 132, 0.18);
+  border: 1px solid var(--border-strong);
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
 .status-copy {
   color: var(--accent);
 }
@@ -682,6 +696,42 @@ textarea {
   justify-content: flex-end;
 }
 
+.notification-head {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.notification-list,
+.member-roster,
+.thread-reply-list {
+  display: grid;
+  gap: 12px;
+}
+
+.notification-card {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.notification-card-unread {
+  border-color: var(--border-strong);
+  background: rgba(217, 191, 132, 0.08);
+}
+
+.notification-card span,
+.notification-card small {
+  color: var(--muted);
+}
+
 .detail-grid {
   display: grid;
   gap: 18px;
@@ -717,6 +767,11 @@ textarea {
 .detail-stack {
   display: grid;
   gap: 12px;
+}
+
+.invite-form {
+  grid-template-columns: minmax(0, 1fr) 150px auto;
+  align-items: center;
 }
 
 .detail-textarea {
@@ -761,10 +816,84 @@ textarea {
   font-weight: 600;
 }
 
+.member-row,
+.invite-card {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.invite-card {
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.invite-card span {
+  display: grid;
+  gap: 4px;
+}
+
+.invite-card small {
+  color: var(--muted);
+  text-transform: capitalize;
+}
+
+.role-pill {
+  border-radius: 999px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  text-transform: capitalize;
+  font-size: 0.82rem;
+}
+
+.select {
+  width: 100%;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: rgba(12, 10, 8, 0.78);
+  color: var(--text);
+  padding: 14px 16px;
+  outline: none;
+}
+
+.select:focus {
+  border-color: var(--border-strong);
+}
+
 .pinned-message-card span,
 .pinned-message-card small {
   color: var(--muted);
   line-height: 1.55;
+}
+
+.thread-panel {
+  align-content: start;
+}
+
+.thread-root-card,
+.thread-reply-card {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.thread-root-card strong,
+.thread-reply-card strong {
+  font-family: var(--font-heading), serif;
+  font-weight: 600;
+}
+
+.thread-root-card span,
+.thread-reply-card span,
+.thread-reply-card small {
+  color: var(--muted);
 }
 
 .hero-callout {
@@ -784,6 +913,11 @@ textarea {
 
 .hero-callout span {
   color: var(--muted);
+}
+
+.hero-callout-inline {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
 }
 
 .message-list {
@@ -923,6 +1057,16 @@ textarea {
   flex-wrap: wrap;
 }
 
+.thread-summary {
+  width: fit-content;
+  border: 1px solid var(--border);
+  background: rgba(217, 191, 132, 0.06);
+  color: var(--accent);
+  border-radius: 999px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
 .edit-message-form {
   flex-direction: column;
 }
@@ -996,6 +1140,25 @@ textarea {
 .chat-compose-wrap {
   display: grid;
   gap: 12px;
+}
+
+.thread-banner {
+  display: grid;
+  gap: 8px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid var(--border-strong);
+  background: rgba(217, 191, 132, 0.07);
+}
+
+.thread-banner strong {
+  font-family: var(--font-heading), serif;
+  font-size: 1.02rem;
+}
+
+.thread-banner span {
+  color: var(--muted);
+  line-height: 1.6;
 }
 
 .chat-compose {
@@ -1073,5 +1236,10 @@ textarea {
   .user-card,
   .user-card-main {
     flex-wrap: wrap;
+  }
+
+  .invite-form,
+  .hero-callout-inline {
+    grid-template-columns: 1fr;
   }
 }

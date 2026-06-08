@@ -11,6 +11,7 @@ export type Room = {
   lastMessageSenderId?: string;
   memberIds?: string[];
   memberNames?: string[];
+  memberRoles?: Record<string, 'owner' | 'admin' | 'member'>;
   topic?: string;
   unreadCounts?: Record<string, number>;
   updatedAt?: { seconds: number; nanoseconds: number } | null;
@@ -32,6 +33,9 @@ export type Message = {
   pinnedAt?: { seconds: number; nanoseconds: number } | null;
   pinnedById?: string;
   pinnedByName?: string;
+  parentMessageId?: string;
+  parentMessagePreview?: string;
+  parentMessageSenderName?: string;
   reactions?: Record<string, Record<string, string>>;
   createdAt?: { seconds: number; nanoseconds: number } | null;
 };
@@ -59,4 +63,31 @@ export type ChatTypingState = {
   displayName: string;
   isTyping: boolean;
   updatedAt?: { seconds: number; nanoseconds: number } | null;
+};
+
+export type ChatInvite = {
+  id: string;
+  roomId: string;
+  roomName: string;
+  email: string;
+  role: 'admin' | 'member';
+  status: 'pending' | 'accepted' | 'revoked';
+  invitedById: string;
+  invitedByName: string;
+  createdAt?: { seconds: number; nanoseconds: number } | null;
+  acceptedAt?: { seconds: number; nanoseconds: number } | null;
+};
+
+export type ChatNotification = {
+  id: string;
+  type: 'invite' | 'reply' | 'announcement';
+  recipientId: string;
+  actorId: string;
+  actorName: string;
+  roomId?: string;
+  roomName?: string;
+  messageId?: string;
+  text: string;
+  isRead: boolean;
+  createdAt?: { seconds: number; nanoseconds: number } | null;
 };
