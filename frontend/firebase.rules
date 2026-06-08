@@ -38,6 +38,22 @@ service cloud.firestore {
       ]);
     }
 
+    function isReadStatePayload() {
+      return request.resource.data.keys().hasOnly([
+        'displayName',
+        'lastReadAt',
+        'lastReadMessageId'
+      ]);
+    }
+
+    function isTypingPayload() {
+      return request.resource.data.keys().hasOnly([
+        'displayName',
+        'isTyping',
+        'updatedAt'
+      ]);
+    }
+
     match /users/{userId} {
       allow read: if isSignedIn();
       allow create, update: if isSignedIn() && request.auth.uid == userId;
@@ -53,6 +69,24 @@ service cloud.firestore {
         allow create: if isSignedIn() &&
           request.resource.data.senderId == request.auth.uid &&
           isMessagePayload() &&
+          roomIsReadable(get(/databases/$(database)/documents/rooms/$(roomId)).data);
+      }
+
+      match /readStates/{userId} {
+        allow read: if isSignedIn() &&
+          roomIsReadable(get(/databases/$(database)/documents/rooms/$(roomId)).data);
+        allow create, update: if isSignedIn() &&
+          request.auth.uid == userId &&
+          isReadStatePayload() &&
+          roomIsReadable(get(/databases/$(database)/documents/rooms/$(roomId)).data);
+      }
+
+      match /typing/{userId} {
+        allow read: if isSignedIn() &&
+          roomIsReadable(get(/databases/$(database)/documents/rooms/$(roomId)).data);
+        allow create, update: if isSignedIn() &&
+          request.auth.uid == userId &&
+          isTypingPayload() &&
           roomIsReadable(get(/databases/$(database)/documents/rooms/$(roomId)).data);
       }
     }

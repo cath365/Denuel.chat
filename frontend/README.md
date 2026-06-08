@@ -10,6 +10,15 @@ This frontend is now a custom Firebase-powered chat app.
 - Firebase Storage attachments
 - Vercel deployment
 
+## Current feature set
+
+- channels and direct messages
+- live presence
+- typing indicators
+- read receipts
+- file and image attachments
+- searchable workspace navigation
+
 ## Local development
 
 ```bash

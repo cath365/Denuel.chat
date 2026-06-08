@@ -24,7 +24,13 @@ import {
 } from 'react';
 
 import { auth, db, storage } from '../lib/firebase';
-import type { ChatUser, Message, Room } from '../types/chat';
+import type {
+  ChatReadState,
+  ChatTypingState,
+  ChatUser,
+  Message,
+  Room,
+} from '../types/chat';
 import { BrandLockup } from './brand-lockup';
 import { useFirebaseAuth } from './firebase-provider';
 
@@ -87,6 +93,43 @@ const asChatUser = (id: string, data: Record<string, unknown>): ChatUser => ({
       : null,
 });
 
+const asReadState = (
+  userId: string,
+  data: Record<string, unknown>
+): ChatReadState => ({
+  userId,
+  displayName: String(data.displayName || 'Teammate'),
+  lastReadMessageId:
+    typeof data.lastReadMessageId === 'string' ? data.lastReadMessageId : '',
+  lastReadAt:
+    data.lastReadAt && typeof data.lastReadAt === 'object'
+      ? (data.lastReadAt as ChatReadState['lastReadAt'])
+      : null,
+});
+
+const asTypingState = (
+  userId: string,
+  data: Record<string, unknown>
+): ChatTypingState => ({
+  userId,
+  displayName: String(data.displayName || 'Teammate'),
+  isTyping: Boolean(data.isTyping),
+  updatedAt:
+    data.updatedAt && typeof data.updatedAt === 'object'
+      ? (data.updatedAt as ChatTypingState['updatedAt'])
+      : null,
+});
+
+const timestampToMs = (
+  timestamp?: { seconds: number; nanoseconds: number } | null
+) => {
+  if (!timestamp) {
+    return 0;
+  }
+
+  return timestamp.seconds * 1000 + Math.floor(timestamp.nanoseconds / 1_000_000);
+};
+
 const formatTimestamp = (
   timestamp?: { seconds: number; nanoseconds: number } | null
 ) => {
@@ -94,7 +137,7 @@ const formatTimestamp = (
     return 'Sending...';
   }
 
-  return new Date(timestamp.seconds * 1000).toLocaleTimeString([], {
+  return new Date(timestampToMs(timestamp)).toLocaleTimeString([], {
     hour: '2-digit',
     minute: '2-digit',
   });
@@ -107,7 +150,7 @@ const formatDayLabel = (
     return 'Now';
   }
 
-  return new Date(timestamp.seconds * 1000).toLocaleDateString([], {
+  return new Date(timestampToMs(timestamp)).toLocaleDateString([], {
     weekday: 'short',
     month: 'short',
     day: 'numeric',
@@ -129,6 +172,14 @@ const formatFileSize = (size?: number) => {
   return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 };
 
+const getInitials = (value: string) =>
+  value
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() || '')
+    .join('') || 'D';
+
 export function ChatApp() {
   const router = useRouter();
   const { user, isLoading } = useFirebaseAuth();
@@ -136,6 +187,8 @@ export function ChatApp() {
   const [people, setPeople] = useState<ChatUser[]>([]);
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [readStates, setReadStates] = useState<ChatReadState[]>([]);
+  const [typingStates, setTypingStates] = useState<ChatTypingState[]>([]);
   const [roomName, setRoomName] = useState('');
   const [roomSearch, setRoomSearch] = useState('');
   const [messageText, setMessageText] = useState('');
@@ -206,6 +259,8 @@ export function ChatApp() {
   useEffect(() => {
     if (!selectedRoomId) {
       setMessages([]);
+      setReadStates([]);
+      setTypingStates([]);
       return undefined;
     }
 
@@ -231,12 +286,98 @@ export function ChatApp() {
   }, [selectedRoomId]);
 
   useEffect(() => {
+    if (!selectedRoomId) {
+      return undefined;
+    }
+
+    const readStatesQuery = query(
+      collection(db, 'rooms', selectedRoomId, 'readStates'),
+      limit(50)
+    );
+
+    const unsubscribe = onSnapshot(readStatesQuery, (snapshot) => {
+      setReadStates(
+        snapshot.docs.map((stateDoc) => asReadState(stateDoc.id, stateDoc.data()))
+      );
+    });
+
+    return unsubscribe;
+  }, [selectedRoomId]);
+
+  useEffect(() => {
+    if (!selectedRoomId) {
+      return undefined;
+    }
+
+    const typingQuery = query(
+      collection(db, 'rooms', selectedRoomId, 'typing'),
+      limit(50)
+    );
+
+    const unsubscribe = onSnapshot(typingQuery, (snapshot) => {
+      setTypingStates(
+        snapshot.docs.map((stateDoc) =>
+          asTypingState(stateDoc.id, stateDoc.data())
+        )
+      );
+    });
+
+    return unsubscribe;
+  }, [selectedRoomId]);
+
+  useEffect(() => {
     if (!messageListRef.current) {
       return;
     }
 
     messageListRef.current.scrollTop = messageListRef.current.scrollHeight;
   }, [messages, selectedRoomId]);
+
+  useEffect(() => {
+    if (!user || !selectedRoomId) {
+      return undefined;
+    }
+
+    const latestMessageId = messages[messages.length - 1]?.id || '';
+
+    const timeoutId = window.setTimeout(() => {
+      void setDoc(
+        doc(db, 'rooms', selectedRoomId, 'readStates', user.uid),
+        {
+          displayName: user.displayName || user.email || 'Denuel User',
+          lastReadAt: serverTimestamp(),
+          lastReadMessageId: latestMessageId,
+        },
+        { merge: true }
+      );
+    }, 250);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [messages, selectedRoomId, user]);
+
+  useEffect(() => {
+    if (!user || !selectedRoomId) {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      void setDoc(
+        doc(db, 'rooms', selectedRoomId, 'typing', user.uid),
+        {
+          displayName: user.displayName || user.email || 'Denuel User',
+          isTyping: messageText.trim().length > 0,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+    }, 350);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [messageText, selectedRoomId, user]);
 
   const selectedRoom = useMemo(
     () => visibleRooms.find((room) => room.id === selectedRoomId) || null,
@@ -292,7 +433,7 @@ export function ChatApp() {
 
       return haystack.includes(roomSearchValue);
     });
-  }, [getRoomLabel, roomSearchValue, visibleRooms]);
+  }, [roomSearchValue, visibleRooms, teammates, user]);
 
   const filteredTeammates = useMemo(() => {
     if (!roomSearchValue) {
@@ -325,6 +466,40 @@ export function ChatApp() {
 
     return teammates.find((person) => person.id === otherMemberId) || null;
   }, [selectedRoom, teammates, user]);
+
+  const activeTypingUsers = useMemo(() => {
+    const now = Date.now();
+
+    return typingStates.filter((typingState) => {
+      if (typingState.userId === user?.uid || !typingState.isTyping) {
+        return false;
+      }
+
+      return now - timestampToMs(typingState.updatedAt) < 9000;
+    });
+  }, [typingStates, user]);
+
+  const latestOwnMessage = useMemo(
+    () => [...messages].reverse().find((message) => message.senderId === user?.uid) || null,
+    [messages, user]
+  );
+
+  const seenByNames = useMemo(() => {
+    if (!latestOwnMessage) {
+      return [];
+    }
+
+    const latestOwnMessageAt = timestampToMs(latestOwnMessage.createdAt);
+
+    return readStates
+      .filter((state) => state.userId !== user?.uid)
+      .filter(
+        (state) =>
+          state.lastReadMessageId === latestOwnMessage.id ||
+          timestampToMs(state.lastReadAt) >= latestOwnMessageAt
+      )
+      .map((state) => state.displayName);
+  }, [latestOwnMessage, readStates, user]);
 
   const handleCreateRoom = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -443,6 +618,16 @@ export function ChatApp() {
           trimmedText || (attachmentName ? `Sent ${attachmentName}` : ''),
         updatedAt: serverTimestamp(),
       });
+
+      await setDoc(
+        doc(db, 'rooms', selectedRoomId, 'typing', user.uid),
+        {
+          displayName: user.displayName || user.email || 'Denuel User',
+          isTyping: false,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
 
       setMessageText('');
       setSelectedFile(null);
@@ -609,9 +794,12 @@ export function ChatApp() {
                   onClick={() => void handleOpenDirectMessage(person)}
                   type='button'
                 >
-                  <span className='user-meta'>
-                    <strong>{person.displayName}</strong>
-                    <span>{person.email}</span>
+                  <span className='user-card-main'>
+                    <span className='avatar-badge'>{getInitials(person.displayName)}</span>
+                    <span className='user-meta'>
+                      <strong>{person.displayName}</strong>
+                      <span>{person.email}</span>
+                    </span>
                   </span>
                   <span
                     className={`presence-pill presence-${
@@ -696,33 +884,42 @@ export function ChatApp() {
                       message.senderId === user.uid ? 'message-card-own' : ''
                     }`}
                   >
-                    <div className='message-meta'>
-                      <strong>{message.senderName}</strong>
-                      <span>{formatTimestamp(message.createdAt)}</span>
-                    </div>
-                    {message.text ? <div className='message-body'>{message.text}</div> : null}
-                    {message.attachmentUrl ? (
-                      <a
-                        className='attachment-link'
-                        href={message.attachmentUrl}
-                        rel='noreferrer'
-                        target='_blank'
-                      >
-                        {message.attachmentType?.startsWith('image/') ? (
-                          <img
-                            alt={message.attachmentName || 'Attachment'}
-                            className='attachment-preview'
-                            src={message.attachmentUrl}
-                          />
+                    <div className='message-frame'>
+                      <span className='avatar-badge avatar-badge-small'>
+                        {getInitials(message.senderName)}
+                      </span>
+                      <div className='message-content'>
+                        <div className='message-meta'>
+                          <strong>{message.senderName}</strong>
+                          <span>{formatTimestamp(message.createdAt)}</span>
+                        </div>
+                        {message.text ? (
+                          <div className='message-body'>{message.text}</div>
                         ) : null}
-                        <span>
-                          {message.attachmentName || 'Attachment'}
-                          {message.attachmentSize
-                            ? ` (${formatFileSize(message.attachmentSize)})`
-                            : ''}
-                        </span>
-                      </a>
-                    ) : null}
+                        {message.attachmentUrl ? (
+                          <a
+                            className='attachment-link'
+                            href={message.attachmentUrl}
+                            rel='noreferrer'
+                            target='_blank'
+                          >
+                            {message.attachmentType?.startsWith('image/') ? (
+                              <img
+                                alt={message.attachmentName || 'Attachment'}
+                                className='attachment-preview'
+                                src={message.attachmentUrl}
+                              />
+                            ) : null}
+                            <span>
+                              {message.attachmentName || 'Attachment'}
+                              {message.attachmentSize
+                                ? ` (${formatFileSize(message.attachmentSize)})`
+                                : ''}
+                            </span>
+                          </a>
+                        ) : null}
+                      </div>
+                    </div>
                   </article>
                 </div>
               );
@@ -740,6 +937,21 @@ export function ChatApp() {
             </div>
           )}
         </div>
+
+        {activeTypingUsers.length > 0 ? (
+          <div className='typing-indicator'>
+            <span className='typing-dots'>
+              <span />
+              <span />
+              <span />
+            </span>
+            <span>
+              {activeTypingUsers.map((typingState) => typingState.displayName).join(', ')}
+              {' '}
+              {activeTypingUsers.length > 1 ? 'are' : 'is'} typing...
+            </span>
+          </div>
+        ) : null}
 
         <form className='chat-compose-wrap' onSubmit={handleSendMessage}>
           <div className='chat-compose'>
@@ -789,6 +1001,12 @@ export function ChatApp() {
             </div>
           ) : null}
         </form>
+
+        {seenByNames.length > 0 ? (
+          <div className='read-receipts'>
+            Seen by {seenByNames.join(', ')}
+          </div>
+        ) : null}
 
         {error ? <div className='auth-error'>{error}</div> : null}
       </section>

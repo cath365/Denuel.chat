@@ -32,3 +32,17 @@ export type ChatUser = {
   presenceStatus?: PresenceStatus;
   lastSeenAt?: { seconds: number; nanoseconds: number } | null;
 };
+
+export type ChatReadState = {
+  userId: string;
+  displayName: string;
+  lastReadAt?: { seconds: number; nanoseconds: number } | null;
+  lastReadMessageId?: string;
+};
+
+export type ChatTypingState = {
+  userId: string;
+  displayName: string;
+  isTyping: boolean;
+  updatedAt?: { seconds: number; nanoseconds: number } | null;
+};
