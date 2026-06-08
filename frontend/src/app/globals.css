@@ -1,12 +1,17 @@
 :root {
-  --bg: #111111;
-  --panel: rgba(20, 20, 20, 0.9);
-  --panel-alt: rgba(247, 241, 225, 0.08);
-  --text: #f7f1e1;
-  --muted: #d2c8b1;
-  --accent: #f7f1e1;
-  --accent-strong: #c7b99a;
-  --border: rgba(247, 241, 225, 0.14);
+  --bg: #0f0e0b;
+  --bg-soft: #171511;
+  --panel: rgba(26, 22, 17, 0.92);
+  --panel-strong: rgba(31, 27, 21, 0.98);
+  --panel-alt: rgba(201, 173, 111, 0.1);
+  --text: #f5eddb;
+  --muted: #cdbda1;
+  --accent: #d9bf84;
+  --accent-strong: #b69255;
+  --accent-deep: #8a6836;
+  --border: rgba(217, 191, 132, 0.16);
+  --border-strong: rgba(217, 191, 132, 0.28);
+  --shadow: 0 28px 90px rgba(0, 0, 0, 0.42);
 }
 
 * {
@@ -18,14 +23,21 @@ body {
   margin: 0;
   min-height: 100%;
   background:
-    radial-gradient(circle at top left, rgba(247, 241, 225, 0.08), transparent 30%),
-    radial-gradient(circle at bottom right, rgba(199, 185, 154, 0.1), transparent 30%),
-    var(--bg);
+    radial-gradient(circle at top left, rgba(217, 191, 132, 0.12), transparent 28%),
+    radial-gradient(circle at top right, rgba(122, 88, 35, 0.14), transparent 30%),
+    radial-gradient(circle at bottom center, rgba(255, 244, 214, 0.04), transparent 32%),
+    linear-gradient(180deg, #120f0c 0%, #0c0b09 100%);
   color: var(--text);
 }
 
 body {
-  font-family: var(--font-body), sans-serif;
+  font-family: var(--font-body), serif;
+  letter-spacing: 0.01em;
+}
+
+::selection {
+  background: rgba(217, 191, 132, 0.3);
+  color: #fff7e6;
 }
 
 a {
@@ -40,7 +52,7 @@ textarea {
 }
 
 .shell {
-  width: min(1180px, calc(100vw - 32px));
+  width: min(1200px, calc(100vw - 32px));
   margin: 0 auto;
 }
 
@@ -52,15 +64,17 @@ textarea {
 }
 
 .home-page {
-  padding-block: 64px;
+  padding-block: 72px;
 }
 
 .card {
   border: 1px solid var(--border);
-  background: var(--panel);
-  backdrop-filter: blur(22px);
-  border-radius: 28px;
-  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.38);
+  background:
+    linear-gradient(180deg, rgba(255, 249, 236, 0.03), transparent 16%),
+    var(--panel);
+  backdrop-filter: blur(24px);
+  border-radius: 30px;
+  box-shadow: var(--shadow);
 }
 
 .grid {
@@ -74,12 +88,12 @@ textarea {
 }
 
 .home-layout {
-  grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
+  grid-template-columns: minmax(0, 1.16fr) minmax(340px, 0.84fr);
   align-items: stretch;
 }
 
 .panel {
-  padding: 32px;
+  padding: 34px;
 }
 
 .eyebrow {
@@ -90,9 +104,10 @@ textarea {
   border-radius: 999px;
   background: var(--panel-alt);
   color: var(--muted);
-  letter-spacing: 0.12em;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
-  font-size: 12px;
+  font-size: 11px;
+  border: 1px solid rgba(217, 191, 132, 0.14);
 }
 
 .brand-lockup {
@@ -103,9 +118,9 @@ textarea {
 }
 
 .brand-lockup-image {
-  border-radius: 18px;
-  border: 1px solid var(--border);
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.3);
+  border-radius: 20px;
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.34);
 }
 
 .brand-lockup-title,
@@ -114,33 +129,38 @@ textarea {
 }
 
 .brand-lockup-title {
-  font-family: var(--font-heading), sans-serif;
-  font-size: 1.1rem;
+  font-family: var(--font-heading), serif;
+  font-size: 1.45rem;
+  font-weight: 600;
   letter-spacing: 0.02em;
 }
 
 .brand-lockup-subtitle {
   color: var(--muted);
-  font-size: 0.92rem;
-  margin-top: 4px;
+  font-size: 0.96rem;
+  margin-top: 2px;
 }
 
 .title {
-  margin: 18px 0 12px;
-  font-size: clamp(2.5rem, 6vw, 5rem);
-  line-height: 0.95;
+  margin: 6px 0 8px;
+  font-family: var(--font-heading), serif;
+  font-size: clamp(3.2rem, 7vw, 5.8rem);
+  line-height: 0.92;
+  font-weight: 600;
+  letter-spacing: -0.02em;
 }
 
 .subtitle {
   margin: 0;
-  max-width: 40rem;
+  max-width: 41rem;
   color: var(--muted);
-  line-height: 1.7;
+  line-height: 1.78;
+  font-size: 1.04rem;
 }
 
 .home-hero-card {
   display: grid;
-  gap: 22px;
+  gap: 24px;
 }
 
 .welcome-strip {
@@ -154,7 +174,7 @@ textarea {
   padding: 8px 12px;
   border-radius: 999px;
   border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 248, 231, 0.04);
   color: var(--muted);
   font-size: 0.88rem;
 }
@@ -173,24 +193,25 @@ textarea {
 
 .home-kpi {
   padding: 18px;
-  border-radius: 22px;
+  border-radius: 24px;
   border: 1px solid var(--border);
-  background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.05),
-    rgba(255, 255, 255, 0.02)
-  );
+  background:
+    linear-gradient(180deg, rgba(255, 247, 226, 0.05), rgba(255, 255, 255, 0.01)),
+    rgba(22, 18, 14, 0.7);
 }
 
 .home-kpi strong {
   display: block;
   margin-bottom: 8px;
+  font-family: var(--font-heading), serif;
+  font-size: 1.3rem;
+  font-weight: 600;
 }
 
 .home-kpi span {
   color: var(--muted);
-  line-height: 1.6;
-  font-size: 0.95rem;
+  line-height: 1.62;
+  font-size: 0.96rem;
 }
 
 .showcase-shell {
@@ -198,8 +219,8 @@ textarea {
   gap: 18px;
   align-content: start;
   background:
-    radial-gradient(circle at top right, rgba(247, 241, 225, 0.08), transparent 36%),
-    rgba(20, 20, 20, 0.9);
+    radial-gradient(circle at top right, rgba(217, 191, 132, 0.1), transparent 36%),
+    linear-gradient(180deg, rgba(28, 24, 19, 0.96), rgba(20, 17, 13, 0.96));
 }
 
 .showcase-topline {
@@ -218,10 +239,10 @@ textarea {
 .showcase-panel {
   display: grid;
   gap: 18px;
-  padding: 22px;
-  border-radius: 24px;
+  padding: 24px;
+  border-radius: 26px;
   border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.035);
+  background: rgba(255, 251, 241, 0.03);
 }
 
 .showcase-header {
@@ -229,6 +250,12 @@ textarea {
   gap: 12px;
   align-items: center;
   justify-content: space-between;
+}
+
+.showcase-header strong {
+  font-family: var(--font-heading), serif;
+  font-size: 1.45rem;
+  font-weight: 600;
 }
 
 .showcase-header div div {
@@ -244,9 +271,9 @@ textarea {
 
 .showcase-card {
   padding: 16px;
-  border-radius: 18px;
+  border-radius: 20px;
   border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(255, 255, 255, 0.025);
   display: grid;
   gap: 8px;
   color: var(--muted);
@@ -254,6 +281,9 @@ textarea {
 
 .showcase-card strong {
   color: var(--text);
+  font-family: var(--font-heading), serif;
+  font-size: 1.15rem;
+  font-weight: 600;
 }
 
 .activity-feed {
@@ -266,7 +296,7 @@ textarea {
   gap: 12px;
   align-items: flex-start;
   padding: 14px 0;
-  border-top: 1px solid rgba(247, 241, 225, 0.08);
+  border-top: 1px solid rgba(217, 191, 132, 0.08);
 }
 
 .activity-item:first-child {
@@ -304,36 +334,41 @@ textarea {
 }
 
 .input {
-  background: rgba(4, 24, 21, 0.8);
+  background: rgba(12, 10, 8, 0.78);
   color: var(--text);
+  box-shadow: inset 0 1px 0 rgba(255, 244, 214, 0.03);
 }
 
 .input::placeholder,
 .composer-textarea::placeholder {
-  color: rgba(210, 200, 177, 0.7);
+  color: rgba(205, 189, 161, 0.68);
 }
 
 .button {
   background: linear-gradient(135deg, var(--accent-strong), var(--accent));
-  color: #111111;
+  color: #17120c;
   font-weight: 700;
   cursor: pointer;
-  transition: transform 140ms ease, opacity 140ms ease;
+  transition: transform 140ms ease, opacity 140ms ease, box-shadow 140ms ease;
+  box-shadow: 0 10px 24px rgba(182, 146, 85, 0.22);
 }
 
 .button:hover {
   transform: translateY(-1px);
+  box-shadow: 0 14px 28px rgba(182, 146, 85, 0.28);
 }
 
 .button.secondary {
   background: transparent;
   color: var(--text);
+  box-shadow: none;
 }
 
 .button:disabled {
   opacity: 0.65;
   cursor: not-allowed;
   transform: none;
+  box-shadow: none;
 }
 
 .meta {
@@ -346,13 +381,16 @@ textarea {
 .summary-card {
   padding: 14px 16px;
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.03);
   border: 1px solid var(--border);
 }
 
 .meta-item strong,
 .summary-card strong {
   display: block;
+  font-family: var(--font-heading), serif;
+  font-size: 1.12rem;
+  font-weight: 600;
 }
 
 .meta-item div,
@@ -374,15 +412,15 @@ textarea {
   width: 10px;
   height: 10px;
   border-radius: 999px;
-  background: #f59e0b;
+  background: #c99537;
 }
 
 .dot.live {
-  background: #22c55e;
+  background: #5fb87c;
 }
 
 .auth-error {
-  color: #ffb4b4;
+  color: #ffbdbd;
   line-height: 1.6;
 }
 
@@ -422,9 +460,9 @@ textarea {
 
 .room-section-title {
   color: var(--muted);
-  font-size: 0.82rem;
+  font-size: 0.8rem;
   font-weight: 700;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
 }
 
@@ -464,12 +502,19 @@ textarea {
 .room-card,
 .user-card {
   border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.03);
   color: var(--text);
-  border-radius: 18px;
+  border-radius: 20px;
   padding: 14px 16px;
   text-align: left;
   cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease, transform 140ms ease;
+}
+
+.room-card:hover,
+.user-card:hover {
+  border-color: var(--border-strong);
+  transform: translateY(-1px);
 }
 
 .room-card {
@@ -498,15 +543,16 @@ textarea {
   display: inline-grid;
   place-items: center;
   background: var(--accent);
-  color: #111111;
+  color: #17120c;
   font-size: 0.8rem;
   font-weight: 700;
   flex-shrink: 0;
+  box-shadow: 0 8px 18px rgba(182, 146, 85, 0.26);
 }
 
 .room-card-active {
-  border-color: rgba(247, 241, 225, 0.4);
-  background: rgba(247, 241, 225, 0.08);
+  border-color: var(--border-strong);
+  background: rgba(217, 191, 132, 0.08);
 }
 
 .mini-empty-state {
@@ -523,8 +569,8 @@ textarea {
   border-radius: 999px;
   display: inline-grid;
   place-items: center;
-  background: linear-gradient(135deg, rgba(247, 241, 225, 0.22), rgba(199, 185, 154, 0.32));
-  border: 1px solid var(--border);
+  background: linear-gradient(135deg, rgba(217, 191, 132, 0.26), rgba(138, 104, 54, 0.36));
+  border: 1px solid var(--border-strong);
   color: var(--text);
   font-weight: 700;
   flex-shrink: 0;
@@ -550,13 +596,13 @@ textarea {
 }
 
 .presence-online {
-  background: rgba(34, 197, 94, 0.14);
-  color: #86efac;
+  background: rgba(95, 184, 124, 0.14);
+  color: #8bd2a2;
 }
 
 .presence-away {
-  background: rgba(245, 158, 11, 0.14);
-  color: #fcd34d;
+  background: rgba(201, 149, 55, 0.14);
+  color: #efc671;
 }
 
 .presence-offline {
@@ -573,9 +619,15 @@ textarea {
   display: grid;
   gap: 8px;
   padding: 18px 20px;
-  border-radius: 20px;
+  border-radius: 22px;
   border: 1px dashed var(--border);
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.hero-callout strong {
+  font-family: var(--font-heading), serif;
+  font-size: 1.26rem;
+  font-weight: 600;
 }
 
 .hero-callout span {
@@ -611,16 +663,16 @@ textarea {
 
 .message-card {
   border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.04);
-  border-radius: 20px 20px 20px 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 22px 22px 22px 10px;
   padding: 14px 16px;
   max-width: min(720px, 100%);
 }
 
 .message-card-own {
   justify-self: end;
-  background: rgba(34, 197, 94, 0.12);
-  border-radius: 20px 20px 8px 20px;
+  background: rgba(217, 191, 132, 0.09);
+  border-radius: 22px 22px 10px 22px;
 }
 
 .message-frame {
@@ -643,8 +695,14 @@ textarea {
   font-size: 0.9rem;
 }
 
+.message-meta strong {
+  font-family: var(--font-heading), serif;
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
 .message-body {
-  line-height: 1.65;
+  line-height: 1.68;
   white-space: pre-wrap;
 }
 
@@ -669,6 +727,13 @@ textarea {
   border-radius: 999px;
   padding: 6px 10px;
   cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease, transform 140ms ease;
+}
+
+.reaction-chip:hover,
+.reaction-picker-button:hover {
+  border-color: var(--border-strong);
+  transform: translateY(-1px);
 }
 
 .reaction-chip {
@@ -678,13 +743,13 @@ textarea {
 }
 
 .reaction-chip-active {
-  background: rgba(247, 241, 225, 0.14);
-  border-color: rgba(247, 241, 225, 0.36);
+  background: rgba(217, 191, 132, 0.14);
+  border-color: var(--border-strong);
 }
 
 .attachment-preview {
   width: min(280px, 100%);
-  border-radius: 16px;
+  border-radius: 18px;
   border: 1px solid var(--border);
 }
 
@@ -751,7 +816,7 @@ textarea {
 .composer-textarea {
   min-height: 120px;
   resize: vertical;
-  line-height: 1.6;
+  line-height: 1.65;
 }
 
 .compose-actions {

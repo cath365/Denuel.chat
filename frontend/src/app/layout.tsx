@@ -1,16 +1,17 @@
 import type { Metadata } from 'next';
-import { Space_Grotesk, IBM_Plex_Sans } from 'next/font/google';
+import { Cormorant_Garamond, Source_Sans_3 } from 'next/font/google';
 
 import { FirebaseProvider } from '../components/firebase-provider';
 import { env } from '../lib/env';
 import './globals.css';
 
-const heading = Space_Grotesk({
+const heading = Cormorant_Garamond({
   subsets: ['latin'],
+  weight: ['500', '600', '700'],
   variable: '--font-heading',
 });
 
-const body = IBM_Plex_Sans({
+const body = Source_Sans_3({
   subsets: ['latin'],
   weight: ['400', '500', '600', '700'],
   variable: '--font-body',
