@@ -10,6 +10,7 @@ service cloud.firestore {
       return request.resource.data.keys().hasOnly([
         'kind',
         'name',
+        'topic',
         'createdAt',
         'updatedAt',
         'createdBy',
@@ -37,6 +38,13 @@ service cloud.firestore {
         'attachmentSize',
         'attachmentType',
         'attachmentUrl',
+        'deletedAt',
+        'editedAt',
+        'isDeleted',
+        'isPinned',
+        'pinnedAt',
+        'pinnedById',
+        'pinnedByName',
         'reactions'
       ]);
     }
@@ -57,6 +65,47 @@ service cloud.firestore {
       ]);
     }
 
+    function messageRoomData(roomId) {
+      return get(/databases/$(database)/documents/rooms/$(roomId)).data;
+    }
+
+    function isReactionOnlyUpdate() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+        'reactions'
+      ]);
+    }
+
+    function isPinOnlyUpdate() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'isPinned',
+          'pinnedAt',
+          'pinnedById',
+          'pinnedByName'
+        ]) &&
+        (
+          request.resource.data.isPinned == false ||
+          request.resource.data.pinnedById == request.auth.uid
+        );
+    }
+
+    function isOwnMessageUpdate() {
+      return request.auth.uid == resource.data.senderId &&
+        request.resource.data.senderId == resource.data.senderId &&
+        request.resource.data.senderName == resource.data.senderName &&
+        request.resource.data.createdAt == resource.data.createdAt &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'text',
+          'attachmentName',
+          'attachmentSize',
+          'attachmentType',
+          'attachmentUrl',
+          'editedAt',
+          'isDeleted',
+          'deletedAt',
+          'reactions'
+        ]);
+    }
+
     match /users/{userId} {
       allow read: if isSignedIn();
       allow create, update: if isSignedIn() && request.auth.uid == userId;
@@ -68,32 +117,36 @@ service cloud.firestore {
       allow update: if isSignedIn() && roomIsReadable(resource.data);
 
       match /messages/{messageId} {
-        allow read: if isSignedIn() && roomIsReadable(get(/databases/$(database)/documents/rooms/$(roomId)).data);
+        allow read: if isSignedIn() && roomIsReadable(messageRoomData(roomId));
         allow create: if isSignedIn() &&
           request.resource.data.senderId == request.auth.uid &&
           isMessagePayload() &&
-          roomIsReadable(get(/databases/$(database)/documents/rooms/$(roomId)).data);
+          roomIsReadable(messageRoomData(roomId));
         allow update: if isSignedIn() &&
-          roomIsReadable(get(/databases/$(database)/documents/rooms/$(roomId)).data) &&
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions']);
+          roomIsReadable(messageRoomData(roomId)) &&
+          (
+            isReactionOnlyUpdate() ||
+            isPinOnlyUpdate() ||
+            isOwnMessageUpdate()
+          );
       }
 
       match /readStates/{userId} {
         allow read: if isSignedIn() &&
-          roomIsReadable(get(/databases/$(database)/documents/rooms/$(roomId)).data);
+          roomIsReadable(messageRoomData(roomId));
         allow create, update: if isSignedIn() &&
           request.auth.uid == userId &&
           isReadStatePayload() &&
-          roomIsReadable(get(/databases/$(database)/documents/rooms/$(roomId)).data);
+          roomIsReadable(messageRoomData(roomId));
       }
 
       match /typing/{userId} {
         allow read: if isSignedIn() &&
-          roomIsReadable(get(/databases/$(database)/documents/rooms/$(roomId)).data);
+          roomIsReadable(messageRoomData(roomId));
         allow create, update: if isSignedIn() &&
           request.auth.uid == userId &&
           isTypingPayload() &&
-          roomIsReadable(get(/databases/$(database)/documents/rooms/$(roomId)).data);
+          roomIsReadable(messageRoomData(roomId));
       }
     }
   }

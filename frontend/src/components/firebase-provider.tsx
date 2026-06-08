@@ -48,6 +48,7 @@ export function FirebaseProvider({ children }: { children: ReactNode }) {
         {
           email: user.email || '',
           displayName: user.displayName || user.email || 'Denuel User',
+          photoURL: user.photoURL || '',
           presenceStatus,
           lastSeenAt: serverTimestamp(),
         },

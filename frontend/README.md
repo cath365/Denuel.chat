@@ -14,10 +14,13 @@ This frontend is now a custom Firebase-powered chat app.
 
 - channels and direct messages
 - live presence
+- richer user profiles with status and avatar uploads
 - typing indicators
 - read receipts
 - unread room counts
 - emoji reactions
+- pinned messages
+- message editing and soft delete
 - file and image attachments
 - searchable workspace navigation
 

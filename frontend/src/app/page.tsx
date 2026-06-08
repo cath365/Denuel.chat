@@ -40,12 +40,12 @@ export default function HomePage() {
               <span>Keep team updates and private conversations organized.</span>
             </div>
             <div className='home-kpi'>
-              <strong>Presence + unread focus</strong>
-              <span>See what matters now and pick up where you left off.</span>
+              <strong>Presence + profiles</strong>
+              <span>Show identity, status, and availability in a calmer team directory.</span>
             </div>
             <div className='home-kpi'>
-              <strong>Files + reactions</strong>
-              <span>Share context quickly and respond naturally in-thread.</span>
+              <strong>Pins + message controls</strong>
+              <span>Save the important updates and keep conversations tidy as work evolves.</span>
             </div>
           </div>
         </section>
@@ -75,7 +75,7 @@ export default function HomePage() {
               <div className='showcase-card'>
                 <strong>Daily flow</strong>
                 <div>Unread counts keep priorities visible.</div>
-                <div>Direct messages stay one tap away.</div>
+                <div>Pinned updates and edits keep context easy to trust.</div>
               </div>
             </div>
 

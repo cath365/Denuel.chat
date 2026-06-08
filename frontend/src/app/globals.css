@@ -567,6 +567,7 @@ textarea {
   width: 40px;
   height: 40px;
   border-radius: 999px;
+  overflow: hidden;
   display: inline-grid;
   place-items: center;
   background: linear-gradient(135deg, rgba(217, 191, 132, 0.26), rgba(138, 104, 54, 0.36));
@@ -580,6 +581,43 @@ textarea {
   width: 34px;
   height: 34px;
   font-size: 0.88rem;
+}
+
+.avatar-badge-large {
+  width: 56px;
+  height: 56px;
+  font-size: 1.08rem;
+}
+
+.avatar-badge-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.profile-card {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border-radius: 24px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.profile-card-head {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+
+.profile-card-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.status-copy {
+  color: var(--accent);
 }
 
 .user-meta {
@@ -613,6 +651,120 @@ textarea {
 .chat-main {
   display: grid;
   gap: 20px;
+}
+
+.chat-main-top {
+  display: flex;
+  gap: 18px;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.chat-room-title {
+  margin: 10px 0 6px;
+  font-family: var(--font-heading), serif;
+  font-size: clamp(1.8rem, 3vw, 2.4rem);
+  font-weight: 600;
+}
+
+.chat-room-subtitle {
+  margin: 0;
+  max-width: 760px;
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+.chat-header-stats {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.detail-grid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.detail-card {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+  border-radius: 24px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.detail-card-head {
+  display: grid;
+  gap: 6px;
+}
+
+.detail-card-head strong {
+  font-family: var(--font-heading), serif;
+  font-size: 1.15rem;
+  font-weight: 600;
+}
+
+.detail-card-head span {
+  color: var(--muted);
+  line-height: 1.65;
+}
+
+.detail-form,
+.detail-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.detail-textarea {
+  min-height: 110px;
+  resize: vertical;
+}
+
+.detail-bullet {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.detail-bullet span {
+  color: var(--muted);
+}
+
+.pinned-message-card {
+  display: grid;
+  gap: 6px;
+  text-align: left;
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 140ms ease, transform 140ms ease, background 140ms ease;
+}
+
+.pinned-message-card:hover {
+  border-color: var(--border-strong);
+  background: rgba(217, 191, 132, 0.08);
+  transform: translateY(-1px);
+}
+
+.pinned-message-card strong {
+  font-family: var(--font-heading), serif;
+  font-weight: 600;
+}
+
+.pinned-message-card span,
+.pinned-message-card small {
+  color: var(--muted);
+  line-height: 1.55;
 }
 
 .hero-callout {
@@ -693,6 +845,8 @@ textarea {
 .message-meta {
   color: var(--muted);
   font-size: 0.9rem;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .message-meta strong {
@@ -704,6 +858,21 @@ textarea {
 .message-body {
   line-height: 1.68;
   white-space: pre-wrap;
+}
+
+.message-body-deleted {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.message-flag {
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 0.76rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .attachment-link {
@@ -747,10 +916,31 @@ textarea {
   border-color: var(--border-strong);
 }
 
+.message-actions,
+.edit-message-form {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.edit-message-form {
+  flex-direction: column;
+}
+
 .attachment-preview {
   width: min(280px, 100%);
   border-radius: 18px;
   border: 1px solid var(--border);
+}
+
+.attachment-card {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text);
 }
 
 .empty-state {

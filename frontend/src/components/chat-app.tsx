@@ -1,6 +1,6 @@
 'use client';
 
-import { signOut } from 'firebase/auth';
+import { signOut, updateProfile } from 'firebase/auth';
 import {
   addDoc,
   collection,
@@ -55,6 +55,7 @@ const asRoom = (id: string, data: Record<string, unknown>): Room => ({
   memberNames: Array.isArray(data.memberNames)
     ? data.memberNames.map((value) => String(value))
     : [],
+  topic: typeof data.topic === 'string' ? data.topic : '',
   unreadCounts:
     data.unreadCounts && typeof data.unreadCounts === 'object'
       ? Object.fromEntries(
@@ -86,6 +87,24 @@ const asMessage = (id: string, data: Record<string, unknown>): Message => ({
     typeof data.attachmentType === 'string' ? data.attachmentType : undefined,
   attachmentUrl:
     typeof data.attachmentUrl === 'string' ? data.attachmentUrl : undefined,
+  deletedAt:
+    data.deletedAt && typeof data.deletedAt === 'object'
+      ? (data.deletedAt as Message['deletedAt'])
+      : null,
+  editedAt:
+    data.editedAt && typeof data.editedAt === 'object'
+      ? (data.editedAt as Message['editedAt'])
+      : null,
+  isDeleted: Boolean(data.isDeleted),
+  isPinned: Boolean(data.isPinned),
+  pinnedAt:
+    data.pinnedAt && typeof data.pinnedAt === 'object'
+      ? (data.pinnedAt as Message['pinnedAt'])
+      : null,
+  pinnedById:
+    typeof data.pinnedById === 'string' ? data.pinnedById : '',
+  pinnedByName:
+    typeof data.pinnedByName === 'string' ? data.pinnedByName : '',
   reactions:
     data.reactions && typeof data.reactions === 'object'
       ? Object.fromEntries(
@@ -113,12 +132,16 @@ const asChatUser = (id: string, data: Record<string, unknown>): ChatUser => ({
   id,
   displayName: String(data.displayName || data.email || 'Denuel User'),
   email: String(data.email || ''),
+  bio: typeof data.bio === 'string' ? data.bio : '',
+  photoURL: typeof data.photoURL === 'string' ? data.photoURL : '',
   presenceStatus:
     data.presenceStatus === 'online' ||
     data.presenceStatus === 'away' ||
     data.presenceStatus === 'offline'
       ? data.presenceStatus
       : 'offline',
+  statusMessage:
+    typeof data.statusMessage === 'string' ? data.statusMessage : '',
   lastSeenAt:
     data.lastSeenAt && typeof data.lastSeenAt === 'object'
       ? (data.lastSeenAt as ChatUser['lastSeenAt'])
@@ -189,6 +212,35 @@ const formatDayLabel = (
   });
 };
 
+const formatRelativeSeen = (
+  timestamp?: { seconds: number; nanoseconds: number } | null
+) => {
+  if (!timestamp) {
+    return 'No recent activity';
+  }
+
+  const deltaMinutes = Math.max(
+    0,
+    Math.round((Date.now() - timestampToMs(timestamp)) / 60000)
+  );
+
+  if (deltaMinutes < 1) {
+    return 'Active just now';
+  }
+
+  if (deltaMinutes < 60) {
+    return `Active ${deltaMinutes}m ago`;
+  }
+
+  const deltaHours = Math.round(deltaMinutes / 60);
+
+  if (deltaHours < 24) {
+    return `Active ${deltaHours}h ago`;
+  }
+
+  return `Active on ${formatDayLabel(timestamp)}`;
+};
+
 const createDirectRoomId = (currentUserId: string, targetUserId: string) =>
   ['dm', ...[currentUserId, targetUserId].sort()].join('_');
 
@@ -212,6 +264,37 @@ const getInitials = (value: string) =>
     .map((part) => part[0]?.toUpperCase() || '')
     .join('') || 'D';
 
+function AvatarBadge({
+  displayName,
+  photoURL,
+  size = 'md',
+}: {
+  displayName: string;
+  photoURL?: string;
+  size?: 'sm' | 'md' | 'lg';
+}) {
+  const sizeClass =
+    size === 'lg'
+      ? 'avatar-badge-large'
+      : size === 'sm'
+        ? 'avatar-badge-small'
+        : '';
+
+  return photoURL ? (
+    <span className={`avatar-badge ${sizeClass}`}>
+      <img
+        alt={displayName}
+        className='avatar-badge-image'
+        src={photoURL}
+      />
+    </span>
+  ) : (
+    <span className={`avatar-badge ${sizeClass}`}>
+      {getInitials(displayName)}
+    </span>
+  );
+}
+
 export function ChatApp() {
   const router = useRouter();
   const { user, isLoading } = useFirebaseAuth();
@@ -223,11 +306,26 @@ export function ChatApp() {
   const [typingStates, setTypingStates] = useState<ChatTypingState[]>([]);
   const [roomName, setRoomName] = useState('');
   const [roomSearch, setRoomSearch] = useState('');
+  const [roomTopicDraft, setRoomTopicDraft] = useState('');
+  const [channelNameDraft, setChannelNameDraft] = useState('');
   const [messageText, setMessageText] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedAvatarFile, setSelectedAvatarFile] = useState<File | null>(null);
+  const [profileDisplayName, setProfileDisplayName] = useState('');
+  const [profileStatus, setProfileStatus] = useState('');
+  const [profileBio, setProfileBio] = useState('');
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [editingMessageText, setEditingMessageText] = useState('');
   const [error, setError] = useState('');
   const [isCreatingRoom, setIsCreatingRoom] = useState(false);
   const [isSendingMessage, setIsSendingMessage] = useState(false);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [isSavingRoom, setIsSavingRoom] = useState(false);
+  const [activeMessageActionId, setActiveMessageActionId] = useState<string | null>(
+    null
+  );
+  const [showRoomPanel, setShowRoomPanel] = useState(true);
+  const [showProfilePanel, setShowProfilePanel] = useState(false);
   const messageListRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -251,7 +349,7 @@ export function ChatApp() {
   }, []);
 
   useEffect(() => {
-    const usersQuery = query(collection(db, 'users'), limit(50));
+    const usersQuery = query(collection(db, 'users'), limit(100));
 
     const unsubscribe = onSnapshot(
       usersQuery,
@@ -299,7 +397,7 @@ export function ChatApp() {
     const messagesQuery = query(
       collection(db, 'rooms', selectedRoomId, 'messages'),
       orderBy('createdAt', 'asc'),
-      limit(100)
+      limit(150)
     );
 
     const unsubscribe = onSnapshot(
@@ -427,6 +525,41 @@ export function ChatApp() {
     };
   }, [messageText, selectedRoomId, user]);
 
+  const currentUserRecord = useMemo(
+    () =>
+      people.find((person) => person.id === user?.uid) || {
+        id: user?.uid || '',
+        displayName: user?.displayName || user?.email || 'Denuel User',
+        email: user?.email || '',
+        photoURL: user?.photoURL || '',
+        bio: '',
+        statusMessage: '',
+        presenceStatus: 'online',
+        lastSeenAt: null,
+      },
+    [people, user]
+  );
+
+  useEffect(() => {
+    if (!user) {
+      return;
+    }
+
+    setProfileDisplayName(
+      currentUserRecord.displayName || user.displayName || user.email || 'Denuel User'
+    );
+    setProfileStatus(currentUserRecord.statusMessage || '');
+    setProfileBio(currentUserRecord.bio || '');
+  }, [currentUserRecord, user]);
+
+  useEffect(() => {
+    setChannelNameDraft(selectedRoom?.kind === 'channel' ? selectedRoom.name : '');
+    setRoomTopicDraft(selectedRoom?.topic || '');
+    setEditingMessageId(null);
+    setEditingMessageText('');
+    setActiveMessageActionId(null);
+  }, [selectedRoomId, selectedRoom]);
+
   const teammates = useMemo(
     () =>
       people
@@ -477,6 +610,7 @@ export function ChatApp() {
       const haystack = [
         getRoomLabel(room),
         room.lastMessageText || '',
+        room.topic || '',
         ...(room.memberNames || []),
       ]
         .join(' ')
@@ -492,7 +626,9 @@ export function ChatApp() {
     }
 
     return teammates.filter((person) =>
-      `${person.displayName} ${person.email}`.toLowerCase().includes(roomSearchValue)
+      `${person.displayName} ${person.email} ${person.statusMessage || ''}`
+        .toLowerCase()
+        .includes(roomSearchValue)
     );
   }, [roomSearchValue, teammates]);
 
@@ -554,6 +690,14 @@ export function ChatApp() {
       .map((state) => state.displayName);
   }, [latestOwnMessage, readStates, user]);
 
+  const pinnedMessages = useMemo(
+    () =>
+      [...messages]
+        .filter((message) => message.isPinned && !message.isDeleted)
+        .sort((left, right) => timestampToMs(right.pinnedAt) - timestampToMs(left.pinnedAt)),
+    [messages]
+  );
+
   const handleCreateRoom = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
@@ -569,6 +713,7 @@ export function ChatApp() {
       const roomReference = await addDoc(collection(db, 'rooms'), {
         kind: 'channel',
         name: roomName.trim(),
+        topic: '',
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
         createdBy: user.uid,
@@ -609,6 +754,7 @@ export function ChatApp() {
         {
           kind: 'direct',
           name: targetUser.displayName || targetUser.email,
+          topic: '',
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
           createdBy: user.uid,
@@ -634,6 +780,12 @@ export function ChatApp() {
 
   const handleToggleReaction = async (messageId: string, emoji: string) => {
     if (!user || !selectedRoomId) {
+      return;
+    }
+
+    const targetMessage = messages.find((message) => message.id === messageId);
+
+    if (targetMessage?.isDeleted) {
       return;
     }
 
@@ -685,6 +837,226 @@ export function ChatApp() {
     }
   };
 
+  const handleTogglePinMessage = async (message: Message) => {
+    if (!user || !selectedRoomId) {
+      return;
+    }
+
+    setActiveMessageActionId(message.id);
+    setError('');
+
+    try {
+      await updateDoc(doc(db, 'rooms', selectedRoomId, 'messages', message.id), {
+        isPinned: !message.isPinned,
+        pinnedAt: !message.isPinned ? serverTimestamp() : null,
+        pinnedById: !message.isPinned ? user.uid : '',
+        pinnedByName:
+          !message.isPinned ? user.displayName || user.email || 'Denuel User' : '',
+      });
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : 'Pin update failed'
+      );
+    } finally {
+      setActiveMessageActionId(null);
+    }
+  };
+
+  const handleStartEditingMessage = (message: Message) => {
+    setEditingMessageId(message.id);
+    setEditingMessageText(message.text);
+    setActiveMessageActionId(null);
+  };
+
+  const handleCancelEditingMessage = () => {
+    setEditingMessageId(null);
+    setEditingMessageText('');
+  };
+
+  const updateRoomPreviewIfNeeded = async (
+    messageId: string,
+    nextPreview: string
+  ) => {
+    if (!selectedRoomId || messages[messages.length - 1]?.id !== messageId) {
+      return;
+    }
+
+    await updateDoc(doc(db, 'rooms', selectedRoomId), {
+      lastMessageText: nextPreview,
+      updatedAt: serverTimestamp(),
+    });
+  };
+
+  const handleSaveEditedMessage = async (messageId: string) => {
+    if (!selectedRoomId) {
+      return;
+    }
+
+    const trimmedText = editingMessageText.trim();
+
+    if (!trimmedText) {
+      setError('Edited messages cannot be empty.');
+      return;
+    }
+
+    setActiveMessageActionId(messageId);
+    setError('');
+
+    try {
+      await updateDoc(doc(db, 'rooms', selectedRoomId, 'messages', messageId), {
+        text: trimmedText,
+        editedAt: serverTimestamp(),
+      });
+
+      await updateRoomPreviewIfNeeded(messageId, trimmedText);
+
+      setEditingMessageId(null);
+      setEditingMessageText('');
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : 'Message edit failed'
+      );
+    } finally {
+      setActiveMessageActionId(null);
+    }
+  };
+
+  const handleDeleteMessage = async (messageId: string) => {
+    if (!selectedRoomId) {
+      return;
+    }
+
+    const shouldDelete = window.confirm(
+      'Remove this message from the conversation?'
+    );
+
+    if (!shouldDelete) {
+      return;
+    }
+
+    setActiveMessageActionId(messageId);
+    setError('');
+
+    try {
+      await updateDoc(doc(db, 'rooms', selectedRoomId, 'messages', messageId), {
+        text: 'Message removed',
+        attachmentName: '',
+        attachmentSize: 0,
+        attachmentType: '',
+        attachmentUrl: '',
+        reactions: {},
+        isDeleted: true,
+        deletedAt: serverTimestamp(),
+        editedAt: serverTimestamp(),
+      });
+
+      await updateRoomPreviewIfNeeded(messageId, 'Message removed');
+
+      if (editingMessageId === messageId) {
+        setEditingMessageId(null);
+        setEditingMessageText('');
+      }
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : 'Message delete failed'
+      );
+    } finally {
+      setActiveMessageActionId(null);
+    }
+  };
+
+  const handleSaveRoomDetails = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (!selectedRoomId || !selectedRoom || selectedRoom.kind !== 'channel') {
+      return;
+    }
+
+    const nextName = channelNameDraft.trim();
+
+    if (!nextName) {
+      setError('Channel name cannot be empty.');
+      return;
+    }
+
+    setIsSavingRoom(true);
+    setError('');
+
+    try {
+      await updateDoc(doc(db, 'rooms', selectedRoomId), {
+        name: nextName,
+        topic: roomTopicDraft.trim(),
+        updatedAt: serverTimestamp(),
+      });
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : 'Room update failed'
+      );
+    } finally {
+      setIsSavingRoom(false);
+    }
+  };
+
+  const handleSaveProfile = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (!user) {
+      return;
+    }
+
+    const nextDisplayName = profileDisplayName.trim() || user.email || 'Denuel User';
+    let nextPhotoURL = currentUserRecord.photoURL || user.photoURL || '';
+
+    setIsSavingProfile(true);
+    setError('');
+
+    try {
+      if (selectedAvatarFile) {
+        const avatarPath = `user-avatars/${user.uid}/${Date.now()}-${selectedAvatarFile.name}`;
+        const avatarReference = ref(storage, avatarPath);
+        const uploadResult = await uploadBytes(avatarReference, selectedAvatarFile);
+        nextPhotoURL = await getDownloadURL(uploadResult.ref);
+      }
+
+      await updateProfile(user, {
+        displayName: nextDisplayName,
+        photoURL: nextPhotoURL || null,
+      });
+
+      await setDoc(
+        doc(db, 'users', user.uid),
+        {
+          email: user.email || '',
+          displayName: nextDisplayName,
+          photoURL: nextPhotoURL,
+          statusMessage: profileStatus.trim(),
+          bio: profileBio.trim(),
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      setSelectedAvatarFile(null);
+      setShowProfilePanel(false);
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : 'Profile update failed'
+      );
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
   const sendMessage = async () => {
     if (!user || !selectedRoomId || (!messageText.trim() && !selectedFile)) {
       return;
@@ -721,6 +1093,13 @@ export function ChatApp() {
         attachmentSize,
         attachmentType,
         attachmentUrl,
+        deletedAt: null,
+        editedAt: null,
+        isDeleted: false,
+        isPinned: false,
+        pinnedAt: null,
+        pinnedById: '',
+        pinnedByName: '',
         reactions: {},
       });
 
@@ -787,6 +1166,11 @@ export function ChatApp() {
     }
   };
 
+  const handleJumpToMessage = (messageId: string) => {
+    const messageElement = document.getElementById(`message-${messageId}`);
+    messageElement?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+
   const handleSignOut = async () => {
     await signOut(auth);
     router.push('/login');
@@ -821,13 +1205,43 @@ export function ChatApp() {
           <div>
             <BrandLockup subtitle='Live workspace' />
             <div className='eyebrow'>Signed in</div>
-            <h2 style={{ margin: '12px 0 4px', fontFamily: 'var(--font-heading)' }}>
-              {user.displayName || user.email}
-            </h2>
           </div>
           <button className='button secondary slim' onClick={handleSignOut}>
             Sign out
           </button>
+        </div>
+
+        <div className='profile-card'>
+          <div className='profile-card-head'>
+            <AvatarBadge
+              displayName={currentUserRecord.displayName}
+              photoURL={currentUserRecord.photoURL}
+              size='lg'
+            />
+            <div className='user-meta'>
+              <strong>{currentUserRecord.displayName}</strong>
+              <span>{currentUserRecord.email}</span>
+              <span className='status-copy'>
+                {currentUserRecord.statusMessage || 'Ready to collaborate'}
+              </span>
+            </div>
+          </div>
+          <div className='profile-card-actions'>
+            <button
+              className='button secondary slim'
+              onClick={() => setShowProfilePanel((current) => !current)}
+              type='button'
+            >
+              {showProfilePanel ? 'Close profile' : 'Edit profile'}
+            </button>
+            <button
+              className='button secondary slim'
+              onClick={() => setShowRoomPanel((current) => !current)}
+              type='button'
+            >
+              {showRoomPanel ? 'Hide details' : 'Show details'}
+            </button>
+          </div>
         </div>
 
         <div className='sidebar-summary'>
@@ -837,11 +1251,11 @@ export function ChatApp() {
           </div>
           <div className='summary-card'>
             <strong>{onlineTeammates}</strong>
-            <span>Online</span>
+            <span>Online now</span>
           </div>
           <div className='summary-card'>
-            <strong>{directRooms.length}</strong>
-            <span>DMs</span>
+            <strong>{pinnedMessages.length}</strong>
+            <span>Pinned</span>
           </div>
         </div>
 
@@ -892,7 +1306,7 @@ export function ChatApp() {
                         </span>
                       ) : null}
                     </div>
-                    <span>{room.lastMessageText || 'No messages yet'}</span>
+                    <span>{room.topic || room.lastMessageText || 'No messages yet'}</span>
                   </button>
                 );
               })
@@ -946,10 +1360,14 @@ export function ChatApp() {
                   type='button'
                 >
                   <span className='user-card-main'>
-                    <span className='avatar-badge'>{getInitials(person.displayName)}</span>
+                    <AvatarBadge
+                      displayName={person.displayName}
+                      photoURL={person.photoURL}
+                    />
                     <span className='user-meta'>
                       <strong>{person.displayName}</strong>
                       <span>{person.email}</span>
+                      <span>{person.statusMessage || formatRelativeSeen(person.lastSeenAt)}</span>
                     </span>
                   </span>
                   <span
@@ -969,32 +1387,36 @@ export function ChatApp() {
       </aside>
 
       <section className='card panel chat-main'>
-        <div className='chat-main-head'>
+        <div className='chat-main-top'>
           <div>
             <div className='eyebrow'>
-              {selectedRoom?.kind === 'direct' ? 'Direct message' : 'Realtime chat'}
+              {selectedRoom?.kind === 'direct' ? 'Direct message' : 'Channel'}
             </div>
-            <h2 style={{ margin: '12px 0 4px', fontFamily: 'var(--font-heading)' }}>
-              {selectedRoom
-                ? selectedRoom.kind === 'channel'
-                  ? `# ${selectedRoom.name}`
-                  : getRoomLabel(selectedRoom)
-                : 'Pick a room'}
+            <h2 className='chat-room-title'>
+              {selectedRoom ? getRoomLabel(selectedRoom) : 'Choose a conversation'}
             </h2>
+            <p className='chat-room-subtitle'>
+              {selectedRoom
+                ? selectedRoom.kind === 'direct'
+                  ? selectedDirectUser?.statusMessage ||
+                    formatRelativeSeen(selectedDirectUser?.lastSeenAt)
+                  : selectedRoom.topic || 'Add a channel purpose so teammates know what belongs here.'
+                : 'Create a channel or open a direct message to get started.'}
+            </p>
           </div>
           {selectedRoom ? (
-            <div className='chat-header-meta'>
+            <div className='chat-header-stats'>
               <div className='summary-card summary-card-compact'>
                 <strong>
                   {selectedRoom.kind === 'direct'
-                    ? selectedDirectUser?.presenceStatus || 'offline'
-                    : `${selectedRoom.memberIds?.length || 1} members`}
+                    ? '2'
+                    : Math.max(1, selectedRoom.memberIds?.length || 0)}
                 </strong>
-                <span>
-                  {selectedRoom.kind === 'direct'
-                    ? selectedDirectUser?.email || 'Direct chat'
-                    : 'Workspace room'}
-                </span>
+                <span>Participants</span>
+              </div>
+              <div className='summary-card summary-card-compact'>
+                <strong>{pinnedMessages.length}</strong>
+                <span>Pinned</span>
               </div>
               <div className='summary-card summary-card-compact'>
                 <strong>{formatDayLabel(selectedRoom.updatedAt)}</strong>
@@ -1003,6 +1425,153 @@ export function ChatApp() {
             </div>
           ) : null}
         </div>
+
+        {selectedRoom && (showRoomPanel || showProfilePanel || pinnedMessages.length > 0) ? (
+          <div className='detail-grid'>
+            {showRoomPanel ? (
+              <div className='detail-card'>
+                <div className='detail-card-head'>
+                  <strong>Room details</strong>
+                  <span>
+                    {selectedRoom.kind === 'channel'
+                      ? 'Shape the space before the conversation gets busy.'
+                      : 'Quick context for this private conversation.'}
+                  </span>
+                </div>
+
+                {selectedRoom.kind === 'channel' ? (
+                  <form className='form detail-form' onSubmit={handleSaveRoomDetails}>
+                    <input
+                      className='input'
+                      type='text'
+                      placeholder='Channel name'
+                      value={channelNameDraft}
+                      onChange={(event) => setChannelNameDraft(event.target.value)}
+                    />
+                    <textarea
+                      className='input detail-textarea'
+                      placeholder='What is this channel for?'
+                      rows={3}
+                      value={roomTopicDraft}
+                      onChange={(event) => setRoomTopicDraft(event.target.value)}
+                    />
+                    <button className='button slim' disabled={isSavingRoom} type='submit'>
+                      {isSavingRoom ? 'Saving...' : 'Save channel details'}
+                    </button>
+                  </form>
+                ) : (
+                  <div className='detail-stack'>
+                    <div className='detail-bullet'>
+                      <strong>{selectedDirectUser?.displayName || 'Teammate'}</strong>
+                      <span>{selectedDirectUser?.email || 'Private conversation'}</span>
+                    </div>
+                    <div className='detail-bullet'>
+                      <strong>Presence</strong>
+                      <span>
+                        {selectedDirectUser?.presenceStatus || 'offline'}
+                        {' · '}
+                        {selectedDirectUser?.statusMessage ||
+                          formatRelativeSeen(selectedDirectUser?.lastSeenAt)}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : null}
+
+            <div className='detail-card'>
+              <div className='detail-card-head'>
+                <strong>Pinned messages</strong>
+                <span>Keep the decisions and links your team will need again.</span>
+              </div>
+              {pinnedMessages.length > 0 ? (
+                <div className='detail-stack'>
+                  {pinnedMessages.slice(0, 5).map((message) => (
+                    <button
+                      key={message.id}
+                      className='pinned-message-card'
+                      onClick={() => handleJumpToMessage(message.id)}
+                      type='button'
+                    >
+                      <strong>{message.senderName}</strong>
+                      <span>{message.text || message.attachmentName || 'Pinned attachment'}</span>
+                      <small>
+                        {message.pinnedByName || 'Pinned'}
+                        {' · '}
+                        {formatTimestamp(message.pinnedAt)}
+                      </small>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className='mini-empty-state'>
+                  Pin an important update so it stays easy to find later.
+                </div>
+              )}
+            </div>
+
+            {showProfilePanel ? (
+              <div className='detail-card'>
+                <div className='detail-card-head'>
+                  <strong>Your profile</strong>
+                  <span>Set the identity your team sees inside Denuel Chat.</span>
+                </div>
+                <form className='form detail-form' onSubmit={handleSaveProfile}>
+                  <input
+                    className='input'
+                    type='text'
+                    placeholder='Display name'
+                    value={profileDisplayName}
+                    onChange={(event) => setProfileDisplayName(event.target.value)}
+                  />
+                  <input
+                    className='input'
+                    type='text'
+                    placeholder='Status message'
+                    value={profileStatus}
+                    onChange={(event) => setProfileStatus(event.target.value)}
+                  />
+                  <textarea
+                    className='input detail-textarea'
+                    placeholder='Short bio'
+                    rows={3}
+                    value={profileBio}
+                    onChange={(event) => setProfileBio(event.target.value)}
+                  />
+                  <label className='button secondary slim file-button'>
+                    {selectedAvatarFile ? 'Replace avatar' : 'Upload avatar'}
+                    <input
+                      accept='image/*'
+                      className='file-input'
+                      onChange={(event) =>
+                        setSelectedAvatarFile(event.target.files?.[0] || null)
+                      }
+                      type='file'
+                    />
+                  </label>
+                  {selectedAvatarFile ? (
+                    <div className='file-chip'>
+                      <span>
+                        Ready to use: {selectedAvatarFile.name} (
+                        {formatFileSize(selectedAvatarFile.size)})
+                      </span>
+                      <button
+                        className='button secondary slim'
+                        onClick={() => setSelectedAvatarFile(null)}
+                        type='button'
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ) : null}
+                  <button className='button slim' disabled={isSavingProfile} type='submit'>
+                    {isSavingProfile ? 'Saving...' : 'Save profile'}
+                  </button>
+                </form>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
 
         {!selectedRoom ? (
           <div className='hero-callout'>
@@ -1025,6 +1594,9 @@ export function ChatApp() {
               const reactionEntries = Object.entries(message.reactions || {}).filter(
                 ([, members]) => Object.keys(members).length > 0
               );
+              const isEditing = editingMessageId === message.id;
+              const isOwnMessage = message.senderId === user.uid;
+              const isBusy = activeMessageActionId === message.id;
 
               return (
                 <div key={message.id} className='message-stack'>
@@ -1035,74 +1607,171 @@ export function ChatApp() {
                   ) : null}
                   <article
                     className={`message-card ${
-                      message.senderId === user.uid ? 'message-card-own' : ''
+                      isOwnMessage ? 'message-card-own' : ''
                     }`}
+                    id={`message-${message.id}`}
                   >
                     <div className='message-frame'>
-                      <span className='avatar-badge avatar-badge-small'>
-                        {getInitials(message.senderName)}
-                      </span>
+                      <AvatarBadge
+                        displayName={message.senderName}
+                        photoURL={
+                          people.find((person) => person.id === message.senderId)?.photoURL
+                        }
+                        size='sm'
+                      />
                       <div className='message-content'>
                         <div className='message-meta'>
                           <strong>{message.senderName}</strong>
                           <span>{formatTimestamp(message.createdAt)}</span>
+                          {message.editedAt ? (
+                            <span className='message-flag'>Edited</span>
+                          ) : null}
+                          {message.isPinned ? (
+                            <span className='message-flag'>Pinned</span>
+                          ) : null}
                         </div>
-                        {message.text ? (
-                          <div className='message-body'>{message.text}</div>
-                        ) : null}
-                        {message.attachmentUrl ? (
-                          <a
-                            className='attachment-link'
-                            href={message.attachmentUrl}
-                            rel='noreferrer'
-                            target='_blank'
-                          >
-                            {message.attachmentType?.startsWith('image/') ? (
-                              <img
-                                alt={message.attachmentName || 'Attachment'}
-                                className='attachment-preview'
-                                src={message.attachmentUrl}
-                              />
-                            ) : null}
-                            <span>
-                              {message.attachmentName || 'Attachment'}
-                              {message.attachmentSize
-                                ? ` (${formatFileSize(message.attachmentSize)})`
-                                : ''}
-                            </span>
-                          </a>
-                        ) : null}
-                        <div className='message-reactions'>
-                          {reactionEntries.map(([emoji, members]) => {
-                            const userHasReacted = Boolean(members[user.uid]);
 
-                            return (
+                        {isEditing ? (
+                          <form
+                            className='edit-message-form'
+                            onSubmit={(event) => {
+                              event.preventDefault();
+                              void handleSaveEditedMessage(message.id);
+                            }}
+                          >
+                            <textarea
+                              className='input detail-textarea'
+                              rows={3}
+                              value={editingMessageText}
+                              onChange={(event) =>
+                                setEditingMessageText(event.target.value)
+                              }
+                            />
+                            <div className='message-actions'>
                               <button
-                                key={emoji}
-                                className={`reaction-chip ${
-                                  userHasReacted ? 'reaction-chip-active' : ''
-                                }`}
-                                onClick={() => void handleToggleReaction(message.id, emoji)}
+                                className='button slim'
+                                disabled={isBusy}
+                                type='submit'
+                              >
+                                {isBusy ? 'Saving...' : 'Save changes'}
+                              </button>
+                              <button
+                                className='button secondary slim'
+                                onClick={handleCancelEditingMessage}
                                 type='button'
                               >
-                                <span>{emoji}</span>
-                                <span>{Object.keys(members).length}</span>
+                                Cancel
                               </button>
-                            );
-                          })}
-                        </div>
-                        <div className='reaction-picker'>
-                          {REACTION_OPTIONS.map((emoji) => (
-                            <button
-                              key={emoji}
-                              className='reaction-picker-button'
-                              onClick={() => void handleToggleReaction(message.id, emoji)}
-                              type='button'
+                            </div>
+                          </form>
+                        ) : (
+                          <>
+                            <p
+                              className={`message-body ${
+                                message.isDeleted ? 'message-body-deleted' : ''
+                              }`}
                             >
-                              {emoji}
-                            </button>
-                          ))}
-                        </div>
+                              {message.text || (message.isDeleted ? 'Message removed' : '')}
+                            </p>
+
+                            {message.attachmentUrl && !message.isDeleted ? (
+                              <a
+                                className='attachment-card'
+                                href={message.attachmentUrl}
+                                rel='noreferrer'
+                                target='_blank'
+                              >
+                                {message.attachmentType?.startsWith('image/') ? (
+                                  <img
+                                    alt={message.attachmentName || 'Attachment'}
+                                    className='attachment-preview'
+                                    src={message.attachmentUrl}
+                                  />
+                                ) : null}
+                                <span>
+                                  {message.attachmentName || 'Attachment'}
+                                  {message.attachmentSize
+                                    ? ` (${formatFileSize(message.attachmentSize)})`
+                                    : ''}
+                                </span>
+                              </a>
+                            ) : null}
+
+                            {!message.isDeleted ? (
+                              <>
+                                <div className='message-reactions'>
+                                  {reactionEntries.map(([emoji, members]) => {
+                                    const userHasReacted = Boolean(members[user.uid]);
+
+                                    return (
+                                      <button
+                                        key={emoji}
+                                        className={`reaction-chip ${
+                                          userHasReacted ? 'reaction-chip-active' : ''
+                                        }`}
+                                        onClick={() =>
+                                          void handleToggleReaction(message.id, emoji)
+                                        }
+                                        type='button'
+                                      >
+                                        <span>{emoji}</span>
+                                        <span>{Object.keys(members).length}</span>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                                <div className='reaction-picker'>
+                                  {REACTION_OPTIONS.map((emoji) => (
+                                    <button
+                                      key={emoji}
+                                      className='reaction-picker-button'
+                                      onClick={() =>
+                                        void handleToggleReaction(message.id, emoji)
+                                      }
+                                      type='button'
+                                    >
+                                      {emoji}
+                                    </button>
+                                  ))}
+                                </div>
+                              </>
+                            ) : null}
+
+                            <div className='message-actions'>
+                              <button
+                                className='button secondary slim'
+                                disabled={isBusy}
+                                onClick={() => void handleTogglePinMessage(message)}
+                                type='button'
+                              >
+                                {isBusy
+                                  ? 'Saving...'
+                                  : message.isPinned
+                                    ? 'Unpin'
+                                    : 'Pin'}
+                              </button>
+                              {isOwnMessage && !message.isDeleted ? (
+                                <button
+                                  className='button secondary slim'
+                                  onClick={() => handleStartEditingMessage(message)}
+                                  type='button'
+                                >
+                                  Edit
+                                </button>
+                              ) : null}
+                              {isOwnMessage && !message.isDeleted ? (
+                                <button
+                                  className='button secondary slim'
+                                  disabled={isBusy}
+                                  onClick={() => void handleDeleteMessage(message.id)}
+                                  type='button'
+                                >
+                                  Delete
+                                </button>
+                              ) : null}
+                            </div>
+                          </>
+                        )}
                       </div>
                     </div>
                   </article>
@@ -1110,15 +1779,11 @@ export function ChatApp() {
               );
             })
           ) : (
-            <div className='empty-state'>
-              {selectedRoomId ? (
-                <div className='empty-state-copy'>
-                  <strong>No messages yet</strong>
-                  <span>Start with a greeting, a question, or a file upload.</span>
-                </div>
-              ) : (
-                'Create a channel or open a direct message to start chatting.'
-              )}
+            <div className='hero-callout'>
+              <strong>No messages yet</strong>
+              <span>
+                Start the conversation with a welcome note, quick update, or file.
+              </span>
             </div>
           )}
         </div>
@@ -1163,10 +1828,10 @@ export function ChatApp() {
               </label>
               <button
                 className='button slim'
+                disabled={isSendingMessage || !selectedRoomId}
                 type='submit'
-                disabled={!selectedRoomId || isSendingMessage}
               >
-                {isSendingMessage ? 'Sending...' : 'Send'}
+                {isSendingMessage ? 'Sending...' : 'Send message'}
               </button>
             </div>
           </div>

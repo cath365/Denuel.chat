@@ -11,6 +11,7 @@ export type Room = {
   lastMessageSenderId?: string;
   memberIds?: string[];
   memberNames?: string[];
+  topic?: string;
   unreadCounts?: Record<string, number>;
   updatedAt?: { seconds: number; nanoseconds: number } | null;
 };
@@ -24,6 +25,13 @@ export type Message = {
   attachmentSize?: number;
   attachmentType?: string;
   attachmentUrl?: string;
+  deletedAt?: { seconds: number; nanoseconds: number } | null;
+  editedAt?: { seconds: number; nanoseconds: number } | null;
+  isDeleted?: boolean;
+  isPinned?: boolean;
+  pinnedAt?: { seconds: number; nanoseconds: number } | null;
+  pinnedById?: string;
+  pinnedByName?: string;
   reactions?: Record<string, Record<string, string>>;
   createdAt?: { seconds: number; nanoseconds: number } | null;
 };
@@ -32,7 +40,10 @@ export type ChatUser = {
   id: string;
   displayName: string;
   email: string;
+  bio?: string;
+  photoURL?: string;
   presenceStatus?: PresenceStatus;
+  statusMessage?: string;
   lastSeenAt?: { seconds: number; nanoseconds: number } | null;
 };
 
