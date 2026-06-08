@@ -6,6 +6,7 @@ This is the new architecture for Denuel Chat:
 Next.js on Vercel
   -> Firebase Authentication
   -> Cloud Firestore
+  -> Firebase Storage
 ```
 
 ## 1. Create a Firebase project
@@ -32,7 +33,15 @@ In Firebase Console:
 3. Start in production mode.
 4. Pick the region closest to your users.
 
-## 4. Add environment variables
+## 4. Enable Storage
+
+In Firebase Console:
+
+1. Go to `Storage`.
+2. Create the default bucket.
+3. Use the same project region when possible.
+
+## 5. Add environment variables
 
 For local:
 
@@ -60,7 +69,7 @@ For Vercel, set the same values in project environment variables, but use:
 NEXT_PUBLIC_APP_URL=https://app.denuelchat.com
 ```
 
-## 5. Apply Firestore rules
+## 6. Apply Firestore rules
 
 Copy the rules from:
 
@@ -68,7 +77,15 @@ Copy the rules from:
 
 into the Firestore Rules editor and publish them.
 
-## 6. Run locally
+## 7. Apply Storage rules
+
+Copy the rules from:
+
+- `frontend/storage.rules`
+
+into the Storage Rules editor and publish them.
+
+## 8. Run locally
 
 ```bash
 cd frontend
@@ -82,7 +99,7 @@ Open:
 http://localhost:3001
 ```
 
-## 7. Deploy to Vercel
+## 9. Deploy to Vercel
 
 1. Import the GitHub repo into Vercel.
 2. Set the root directory to `frontend`.
@@ -91,8 +108,10 @@ http://localhost:3001
 5. Add the custom domain:
    `app.denuelchat.com`
 
-## 8. Notes
+## 10. Notes
 
 - Denuel Chat now runs fully on Firebase for auth and realtime messaging.
 - Firestore handles realtime updates via snapshot listeners.
 - Firebase Auth handles sign-up and sign-in.
+- Firebase Storage handles attachments and image uploads.
+- If you see `auth/configuration-not-found`, enable `Email/Password` in Firebase Auth.

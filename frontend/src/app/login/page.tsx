@@ -20,6 +20,10 @@ export default function LoginPage() {
           <div style={{ marginTop: 24 }}>
             <LoginForm />
           </div>
+          <p className='auth-note'>
+            If you see `configuration-not-found`, enable `Email/Password` in
+            Firebase Console under `Authentication -&gt; Sign-in method`.
+          </p>
         </section>
 
         <section className='card panel'>

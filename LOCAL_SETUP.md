@@ -7,6 +7,7 @@ Local stack:
 - Next.js app at `http://localhost:3001`
 - Firebase Authentication
 - Cloud Firestore
+- Firebase Storage
 
 ## 1. Enable Firebase services
 
@@ -17,6 +18,9 @@ In Firebase Console for `denuel-chat`:
 3. Open `Firestore Database`
 4. Create the database if it is not active yet
 5. Publish the rules from `frontend/firebase.rules`
+6. Open `Storage`
+7. Create the default bucket
+8. Publish the rules from `frontend/storage.rules`
 
 ## 2. Start the frontend
 
@@ -52,8 +56,10 @@ If registration or login fails:
 
 1. Confirm `Email/Password` is enabled in Firebase Auth
 2. Confirm Firestore exists in the same Firebase project
-3. Confirm the app is using the values in `frontend/.env.local`
-4. Confirm Firestore rules were published
+3. Confirm Storage is enabled if attachments are failing
+4. Confirm the app is using the values in `frontend/.env.local`
+5. Confirm Firestore and Storage rules were published
+6. If you see `auth/configuration-not-found`, Email/Password is still disabled
 
 ## 5. Stop the app
 

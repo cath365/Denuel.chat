@@ -1,5 +1,6 @@
 'use client';
 
+import { FirebaseError } from 'firebase/app';
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
@@ -10,6 +11,29 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 import { auth, db } from '../lib/firebase';
+
+const getFriendlyAuthError = (error: unknown) => {
+  if (!(error instanceof FirebaseError)) {
+    return 'Authentication failed. Please try again.';
+  }
+
+  switch (error.code) {
+    case 'auth/configuration-not-found':
+      return 'Firebase Email/Password sign-in is not enabled yet. Open Firebase Console -> Authentication -> Sign-in method, then enable Email/Password.';
+    case 'auth/invalid-credential':
+    case 'auth/wrong-password':
+    case 'auth/user-not-found':
+      return 'The email or password is incorrect.';
+    case 'auth/email-already-in-use':
+      return 'That email is already registered. Try signing in instead.';
+    case 'auth/weak-password':
+      return 'Use a stronger password with at least 6 characters.';
+    case 'auth/invalid-email':
+      return 'Enter a valid email address.';
+    default:
+      return error.message;
+  }
+};
 
 export function AuthForm() {
   const router = useRouter();
@@ -48,9 +72,7 @@ export function AuthForm() {
 
       router.push('/chat');
     } catch (caughtError) {
-      const message =
-        caughtError instanceof Error ? caughtError.message : 'Auth failed';
-      setError(message);
+      setError(getFriendlyAuthError(caughtError));
     } finally {
       setIsPending(false);
     }
@@ -102,7 +124,7 @@ export function AuthForm() {
           ? 'Need an account? Register'
           : 'Already have an account? Sign in'}
       </button>
-      {error ? <div style={{ color: '#fca5a5' }}>{error}</div> : null}
+      {error ? <div className='auth-error'>{error}</div> : null}
     </form>
   );
 }

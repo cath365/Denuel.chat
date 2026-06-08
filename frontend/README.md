@@ -7,6 +7,7 @@ This frontend is now a custom Firebase-powered chat app.
 - Next.js App Router
 - Firebase Authentication
 - Cloud Firestore realtime listeners
+- Firebase Storage attachments
 - Vercel deployment
 
 ## Local development
@@ -39,3 +40,4 @@ NEXT_PUBLIC_APP_NAME=Denuel Chat
 ## Rules
 
 Deploy the sample Firestore rules from `firebase.rules`.
+Deploy the sample Storage rules from `storage.rules`.

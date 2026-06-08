@@ -8,25 +8,34 @@ import {
   limit,
   onSnapshot,
   orderBy,
-  updateDoc,
   query,
   serverTimestamp,
+  setDoc,
+  updateDoc,
 } from 'firebase/firestore';
+import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 
-import { auth, db } from '../lib/firebase';
-import type { Message, Room } from '../types/chat';
+import { auth, db, storage } from '../lib/firebase';
+import type { ChatUser, Message, Room } from '../types/chat';
 import { BrandLockup } from './brand-lockup';
 import { useFirebaseAuth } from './firebase-provider';
 
 const asRoom = (id: string, data: Record<string, unknown>): Room => ({
   id,
+  kind: data.kind === 'direct' ? 'direct' : 'channel',
   name: String(data.name || 'Untitled room'),
   createdBy: String(data.createdBy || ''),
   createdByName: String(data.createdByName || 'Unknown'),
   lastMessageText:
     typeof data.lastMessageText === 'string' ? data.lastMessageText : undefined,
+  memberIds: Array.isArray(data.memberIds)
+    ? data.memberIds.map((value) => String(value))
+    : [],
+  memberNames: Array.isArray(data.memberNames)
+    ? data.memberNames.map((value) => String(value))
+    : [],
   createdAt:
     data.createdAt && typeof data.createdAt === 'object'
       ? (data.createdAt as Room['createdAt'])
@@ -42,9 +51,33 @@ const asMessage = (id: string, data: Record<string, unknown>): Message => ({
   text: String(data.text || ''),
   senderId: String(data.senderId || ''),
   senderName: String(data.senderName || 'Unknown'),
+  attachmentName:
+    typeof data.attachmentName === 'string' ? data.attachmentName : undefined,
+  attachmentSize:
+    typeof data.attachmentSize === 'number' ? data.attachmentSize : undefined,
+  attachmentType:
+    typeof data.attachmentType === 'string' ? data.attachmentType : undefined,
+  attachmentUrl:
+    typeof data.attachmentUrl === 'string' ? data.attachmentUrl : undefined,
   createdAt:
     data.createdAt && typeof data.createdAt === 'object'
       ? (data.createdAt as Message['createdAt'])
+      : null,
+});
+
+const asChatUser = (id: string, data: Record<string, unknown>): ChatUser => ({
+  id,
+  displayName: String(data.displayName || data.email || 'Denuel User'),
+  email: String(data.email || ''),
+  presenceStatus:
+    data.presenceStatus === 'online' ||
+    data.presenceStatus === 'away' ||
+    data.presenceStatus === 'offline'
+      ? data.presenceStatus
+      : 'offline',
+  lastSeenAt:
+    data.lastSeenAt && typeof data.lastSeenAt === 'object'
+      ? (data.lastSeenAt as ChatUser['lastSeenAt'])
       : null,
 });
 
@@ -61,14 +94,31 @@ const formatTimestamp = (
   });
 };
 
+const createDirectRoomId = (currentUserId: string, targetUserId: string) =>
+  ['dm', ...[currentUserId, targetUserId].sort()].join('_');
+
+const formatFileSize = (size?: number) => {
+  if (!size) {
+    return '';
+  }
+
+  if (size < 1024 * 1024) {
+    return `${Math.round(size / 1024)} KB`;
+  }
+
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+};
+
 export function ChatApp() {
   const router = useRouter();
   const { user, isLoading } = useFirebaseAuth();
   const [rooms, setRooms] = useState<Room[]>([]);
+  const [people, setPeople] = useState<ChatUser[]>([]);
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [roomName, setRoomName] = useState('');
   const [messageText, setMessageText] = useState('');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [error, setError] = useState('');
   const [isCreatingRoom, setIsCreatingRoom] = useState(false);
   const [isSendingMessage, setIsSendingMessage] = useState(false);
@@ -77,7 +127,7 @@ export function ChatApp() {
     const roomsQuery = query(
       collection(db, 'rooms'),
       orderBy('updatedAt', 'desc'),
-      limit(25)
+      limit(50)
     );
 
     const unsubscribe = onSnapshot(
@@ -87,7 +137,6 @@ export function ChatApp() {
           asRoom(room.id, room.data())
         );
         setRooms(nextRooms);
-        setSelectedRoomId((current) => current || nextRooms[0]?.id || null);
       },
       (caughtError) => {
         setError(caughtError.message);
@@ -96,6 +145,47 @@ export function ChatApp() {
 
     return unsubscribe;
   }, []);
+
+  useEffect(() => {
+    const usersQuery = query(collection(db, 'users'), limit(50));
+
+    const unsubscribe = onSnapshot(
+      usersQuery,
+      (snapshot) => {
+        const nextPeople = snapshot.docs.map((person) =>
+          asChatUser(person.id, person.data())
+        );
+        setPeople(nextPeople);
+      },
+      (caughtError) => {
+        setError(caughtError.message);
+      }
+    );
+
+    return unsubscribe;
+  }, []);
+
+  const visibleRooms = useMemo(() => {
+    if (!user) {
+      return [];
+    }
+
+    return rooms.filter(
+      (room) =>
+        room.kind === 'channel' ||
+        (room.memberIds || []).includes(user.uid)
+    );
+  }, [rooms, user]);
+
+  useEffect(() => {
+    setSelectedRoomId((current) => {
+      if (current && visibleRooms.some((room) => room.id === current)) {
+        return current;
+      }
+
+      return visibleRooms[0]?.id || null;
+    });
+  }, [visibleRooms]);
 
   useEffect(() => {
     if (!selectedRoomId) {
@@ -112,7 +202,9 @@ export function ChatApp() {
     const unsubscribe = onSnapshot(
       messagesQuery,
       (snapshot) => {
-        setMessages(snapshot.docs.map((message) => asMessage(message.id, message.data())));
+        setMessages(
+          snapshot.docs.map((message) => asMessage(message.id, message.data()))
+        );
       },
       (caughtError) => {
         setError(caughtError.message);
@@ -123,9 +215,47 @@ export function ChatApp() {
   }, [selectedRoomId]);
 
   const selectedRoom = useMemo(
-    () => rooms.find((room) => room.id === selectedRoomId) || null,
-    [rooms, selectedRoomId]
+    () => visibleRooms.find((room) => room.id === selectedRoomId) || null,
+    [selectedRoomId, visibleRooms]
   );
+
+  const channelRooms = useMemo(
+    () => visibleRooms.filter((room) => room.kind === 'channel'),
+    [visibleRooms]
+  );
+
+  const directRooms = useMemo(
+    () => visibleRooms.filter((room) => room.kind === 'direct'),
+    [visibleRooms]
+  );
+
+  const teammates = useMemo(
+    () =>
+      people
+        .filter((person) => person.id !== user?.uid)
+        .sort((left, right) =>
+          left.displayName.localeCompare(right.displayName)
+        ),
+    [people, user]
+  );
+
+  const getDisplayName = (targetUserId: string) => {
+    const match = teammates.find((person) => person.id === targetUserId);
+
+    return match?.displayName || match?.email || 'Direct message';
+  };
+
+  const getRoomLabel = (room: Room) => {
+    if (room.kind === 'channel') {
+      return room.name;
+    }
+
+    const otherMemberId = (room.memberIds || []).find(
+      (memberId) => memberId !== user?.uid
+    );
+
+    return otherMemberId ? getDisplayName(otherMemberId) : room.name;
+  };
 
   const handleCreateRoom = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -138,21 +268,66 @@ export function ChatApp() {
     setError('');
 
     try {
+      const selfName = user.displayName || user.email || 'Denuel User';
       const roomReference = await addDoc(collection(db, 'rooms'), {
+        kind: 'channel',
         name: roomName.trim(),
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
         createdBy: user.uid,
-        createdByName: user.displayName || user.email || 'Denuel User',
+        createdByName: selfName,
+        memberIds: [user.uid],
+        memberNames: [selfName],
         lastMessageText: '',
       });
 
       setRoomName('');
       setSelectedRoomId(roomReference.id);
     } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : 'Room creation failed');
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : 'Room creation failed'
+      );
     } finally {
       setIsCreatingRoom(false);
+    }
+  };
+
+  const handleOpenDirectMessage = async (targetUser: ChatUser) => {
+    if (!user) {
+      return;
+    }
+
+    setError('');
+
+    const selfName = user.displayName || user.email || 'Denuel User';
+    const roomId = createDirectRoomId(user.uid, targetUser.id);
+
+    try {
+      await setDoc(
+        doc(db, 'rooms', roomId),
+        {
+          kind: 'direct',
+          name: targetUser.displayName || targetUser.email,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+          createdBy: user.uid,
+          createdByName: selfName,
+          memberIds: [user.uid, targetUser.id],
+          memberNames: [selfName, targetUser.displayName || targetUser.email],
+          lastMessageText: '',
+        },
+        { merge: true }
+      );
+
+      setSelectedRoomId(roomId);
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : 'Direct message setup failed'
+      );
     }
   };
 
@@ -161,7 +336,7 @@ export function ChatApp() {
   ) => {
     event.preventDefault();
 
-    if (!user || !selectedRoomId || !messageText.trim()) {
+    if (!user || !selectedRoomId || (!messageText.trim() && !selectedFile)) {
       return;
     }
 
@@ -169,21 +344,49 @@ export function ChatApp() {
     setError('');
 
     try {
+      let attachmentName = '';
+      let attachmentSize = 0;
+      let attachmentType = '';
+      let attachmentUrl = '';
+
+      if (selectedFile) {
+        const filePath = `chat-uploads/${selectedRoomId}/${Date.now()}-${user.uid}-${selectedFile.name}`;
+        const uploadReference = ref(storage, filePath);
+        const uploadResult = await uploadBytes(uploadReference, selectedFile);
+
+        attachmentName = selectedFile.name;
+        attachmentSize = selectedFile.size;
+        attachmentType = selectedFile.type;
+        attachmentUrl = await getDownloadURL(uploadResult.ref);
+      }
+
+      const trimmedText = messageText.trim();
+
       await addDoc(collection(db, 'rooms', selectedRoomId, 'messages'), {
-        text: messageText.trim(),
+        text: trimmedText,
         senderId: user.uid,
         senderName: user.displayName || user.email || 'Denuel User',
         createdAt: serverTimestamp(),
+        attachmentName,
+        attachmentSize,
+        attachmentType,
+        attachmentUrl,
       });
 
       await updateDoc(doc(db, 'rooms', selectedRoomId), {
-        lastMessageText: messageText.trim(),
+        lastMessageText:
+          trimmedText || (attachmentName ? `Sent ${attachmentName}` : ''),
         updatedAt: serverTimestamp(),
       });
 
       setMessageText('');
+      setSelectedFile(null);
     } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : 'Message send failed');
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : 'Message send failed'
+      );
     } finally {
       setIsSendingMessage(false);
     }
@@ -236,37 +439,81 @@ export function ChatApp() {
           <input
             className='input'
             type='text'
-            placeholder='New room name'
+            placeholder='New channel name'
             value={roomName}
             onChange={(event) => setRoomName(event.target.value)}
             required
           />
           <button className='button' type='submit' disabled={isCreatingRoom}>
-            {isCreatingRoom ? 'Creating...' : 'Create room'}
+            {isCreatingRoom ? 'Creating...' : 'Create channel'}
           </button>
         </form>
 
-        <div className='room-list'>
-          {rooms.map((room) => (
-            <button
-              key={room.id}
-              className={`room-card ${room.id === selectedRoomId ? 'room-card-active' : ''}`}
-              onClick={() => setSelectedRoomId(room.id)}
-              type='button'
-            >
-              <strong>{room.name}</strong>
-              <span>{room.lastMessageText || 'No messages yet'}</span>
-            </button>
-          ))}
+        <div className='sidebar-section'>
+          <div className='room-section-title'>Channels</div>
+          <div className='room-list'>
+            {channelRooms.map((room) => (
+              <button
+                key={room.id}
+                className={`room-card ${room.id === selectedRoomId ? 'room-card-active' : ''}`}
+                onClick={() => setSelectedRoomId(room.id)}
+                type='button'
+              >
+                <strong>{room.name}</strong>
+                <span>{room.lastMessageText || 'No messages yet'}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className='sidebar-section'>
+          <div className='room-section-title'>Direct messages</div>
+          <div className='room-list'>
+            {directRooms.map((room) => (
+              <button
+                key={room.id}
+                className={`room-card ${room.id === selectedRoomId ? 'room-card-active' : ''}`}
+                onClick={() => setSelectedRoomId(room.id)}
+                type='button'
+              >
+                <strong>{getRoomLabel(room)}</strong>
+                <span>{room.lastMessageText || 'No messages yet'}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className='sidebar-section'>
+          <div className='room-section-title'>People</div>
+          <div className='presence-list'>
+            {teammates.map((person) => (
+              <button
+                key={person.id}
+                className='user-card'
+                onClick={() => void handleOpenDirectMessage(person)}
+                type='button'
+              >
+                <span className='user-meta'>
+                  <strong>{person.displayName}</strong>
+                  <span>{person.email}</span>
+                </span>
+                <span className={`presence-pill presence-${person.presenceStatus || 'offline'}`}>
+                  {person.presenceStatus || 'offline'}
+                </span>
+              </button>
+            ))}
+          </div>
         </div>
       </aside>
 
       <section className='card panel chat-main'>
         <div className='chat-main-head'>
           <div>
-            <div className='eyebrow'>Realtime chat</div>
+            <div className='eyebrow'>
+              {selectedRoom?.kind === 'direct' ? 'Direct message' : 'Realtime chat'}
+            </div>
             <h2 style={{ margin: '12px 0 4px', fontFamily: 'var(--font-heading)' }}>
-              {selectedRoom?.name || 'Pick a room'}
+              {selectedRoom ? getRoomLabel(selectedRoom) : 'Pick a room'}
             </h2>
           </div>
         </div>
@@ -284,14 +531,36 @@ export function ChatApp() {
                   <strong>{message.senderName}</strong>
                   <span>{formatTimestamp(message.createdAt)}</span>
                 </div>
-                <div>{message.text}</div>
+                {message.text ? <div>{message.text}</div> : null}
+                {message.attachmentUrl ? (
+                  <a
+                    className='attachment-link'
+                    href={message.attachmentUrl}
+                    rel='noreferrer'
+                    target='_blank'
+                  >
+                    {message.attachmentType?.startsWith('image/') ? (
+                      <img
+                        alt={message.attachmentName || 'Attachment'}
+                        className='attachment-preview'
+                        src={message.attachmentUrl}
+                      />
+                    ) : null}
+                    <span>
+                      {message.attachmentName || 'Attachment'}
+                      {message.attachmentSize
+                        ? ` (${formatFileSize(message.attachmentSize)})`
+                        : ''}
+                    </span>
+                  </a>
+                ) : null}
               </article>
             ))
           ) : (
             <div className='empty-state'>
               {selectedRoomId
                 ? 'No messages yet. Send the first one.'
-                : 'Create a room to start chatting.'}
+                : 'Create a channel or open a direct message to start chatting.'}
             </div>
           )}
         </div>
@@ -304,10 +573,20 @@ export function ChatApp() {
             value={messageText}
             onChange={(event) => setMessageText(event.target.value)}
             disabled={!selectedRoomId}
-            required
           />
+          <label className='button secondary slim file-button'>
+            Attach
+            <input
+              className='file-input'
+              disabled={!selectedRoomId}
+              onChange={(event) =>
+                setSelectedFile(event.target.files?.[0] || null)
+              }
+              type='file'
+            />
+          </label>
           <button
-            className='button'
+            className='button slim'
             type='submit'
             disabled={!selectedRoomId || isSendingMessage}
           >
@@ -315,7 +594,22 @@ export function ChatApp() {
           </button>
         </form>
 
-        {error ? <div style={{ color: '#fca5a5' }}>{error}</div> : null}
+        {selectedFile ? (
+          <div className='file-chip'>
+            <span>
+              Ready to send: {selectedFile.name} ({formatFileSize(selectedFile.size)})
+            </span>
+            <button
+              className='button secondary slim'
+              onClick={() => setSelectedFile(null)}
+              type='button'
+            >
+              Remove
+            </button>
+          </div>
+        ) : null}
+
+        {error ? <div className='auth-error'>{error}</div> : null}
       </section>
     </div>
   );

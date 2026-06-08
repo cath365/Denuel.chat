@@ -8,12 +8,33 @@ service cloud.firestore {
 
     function isRoomPayload() {
       return request.resource.data.keys().hasOnly([
+        'kind',
         'name',
         'createdAt',
         'updatedAt',
         'createdBy',
         'createdByName',
-        'lastMessageText'
+        'lastMessageText',
+        'memberIds',
+        'memberNames'
+      ]);
+    }
+
+    function roomIsReadable(roomData) {
+      return roomData.kind == 'channel' ||
+        roomData.memberIds.hasAny([request.auth.uid]);
+    }
+
+    function isMessagePayload() {
+      return request.resource.data.keys().hasOnly([
+        'text',
+        'senderId',
+        'senderName',
+        'createdAt',
+        'attachmentName',
+        'attachmentSize',
+        'attachmentType',
+        'attachmentUrl'
       ]);
     }
 
@@ -23,14 +44,16 @@ service cloud.firestore {
     }
 
     match /rooms/{roomId} {
-      allow read: if isSignedIn();
+      allow read: if isSignedIn() && roomIsReadable(resource.data);
       allow create: if isSignedIn() && isRoomPayload();
-      allow update: if isSignedIn();
+      allow update: if isSignedIn() && roomIsReadable(resource.data);
 
       match /messages/{messageId} {
-        allow read: if isSignedIn();
+        allow read: if isSignedIn() && roomIsReadable(get(/databases/$(database)/documents/rooms/$(roomId)).data);
         allow create: if isSignedIn() &&
-          request.resource.data.senderId == request.auth.uid;
+          request.resource.data.senderId == request.auth.uid &&
+          isMessagePayload() &&
+          roomIsReadable(get(/databases/$(database)/documents/rooms/$(roomId)).data);
       }
     }
   }
