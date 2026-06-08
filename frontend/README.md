@@ -24,7 +24,11 @@ This frontend is now a custom Firebase-powered chat app.
 - threaded replies
 - channel member roles
 - in-app notifications
-- email invitation flow
+- browser notification support
+- email invitation flow with optional server-side sending
+- private and public channels
+- workspace admin moderation controls
+- global message search
 - file and image attachments
 - searchable workspace navigation
 
@@ -47,6 +51,9 @@ NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=386994886508
 NEXT_PUBLIC_FIREBASE_APP_ID=1:386994886508:web:4d6468d66d207cadaf0549
 NEXT_PUBLIC_APP_URL=https://app.denuelchat.com
 NEXT_PUBLIC_APP_NAME=Denuel Chat
+NEXT_PUBLIC_PRIMARY_ADMIN_EMAIL=denuelinambao@gmail.com
+RESEND_API_KEY=
+INVITE_FROM_EMAIL=
 ```
 
 ## Firestore structure

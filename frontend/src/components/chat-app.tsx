@@ -4,6 +4,7 @@ import { signOut, updateProfile } from 'firebase/auth';
 import {
   addDoc,
   collection,
+  collectionGroup,
   doc,
   limit,
   onSnapshot,
@@ -43,6 +44,14 @@ import { useFirebaseAuth } from './firebase-provider';
 const REACTION_OPTIONS = ['👍', '❤️', '😂', '🔥'];
 const MANAGEABLE_ROLES = ['admin', 'member'] as const;
 
+type SearchResult = {
+  roomId: string;
+  roomLabel: string;
+  message: Message;
+};
+
+type RoomVisibility = 'public' | 'private';
+
 const asRoom = (id: string, data: Record<string, unknown>): Room => ({
   id,
   kind: data.kind === 'direct' ? 'direct' : 'channel',
@@ -75,6 +84,7 @@ const asRoom = (id: string, data: Record<string, unknown>): Room => ({
         )
       : {},
   topic: typeof data.topic === 'string' ? data.topic : '',
+  visibility: data.visibility === 'private' ? 'private' : 'public',
   unreadCounts:
     data.unreadCounts && typeof data.unreadCounts === 'object'
       ? Object.fromEntries(
@@ -159,6 +169,7 @@ const asChatUser = (id: string, data: Record<string, unknown>): ChatUser => ({
   id,
   displayName: String(data.displayName || data.email || 'Denuel User'),
   email: String(data.email || ''),
+  accountStatus: data.accountStatus === 'suspended' ? 'suspended' : 'active',
   bio: typeof data.bio === 'string' ? data.bio : '',
   photoURL: typeof data.photoURL === 'string' ? data.photoURL : '',
   presenceStatus:
@@ -168,6 +179,7 @@ const asChatUser = (id: string, data: Record<string, unknown>): ChatUser => ({
       ? data.presenceStatus
       : 'offline',
   statusMessage: typeof data.statusMessage === 'string' ? data.statusMessage : '',
+  workspaceRole: data.workspaceRole === 'admin' ? 'admin' : 'member',
   lastSeenAt:
     data.lastSeenAt && typeof data.lastSeenAt === 'object'
       ? (data.lastSeenAt as ChatUser['lastSeenAt'])
@@ -397,10 +409,16 @@ export function ChatApp() {
   const [notifications, setNotifications] = useState<ChatNotification[]>([]);
   const [roomInvites, setRoomInvites] = useState<ChatInvite[]>([]);
   const [myInvites, setMyInvites] = useState<ChatInvite[]>([]);
+  const [recentMessages, setRecentMessages] = useState<SearchResult[]>([]);
   const [roomName, setRoomName] = useState('');
   const [roomSearch, setRoomSearch] = useState('');
+  const [messageSearch, setMessageSearch] = useState('');
   const [roomTopicDraft, setRoomTopicDraft] = useState('');
   const [channelNameDraft, setChannelNameDraft] = useState('');
+  const [channelVisibilityDraft, setChannelVisibilityDraft] =
+    useState<RoomVisibility>('public');
+  const [newChannelVisibility, setNewChannelVisibility] =
+    useState<RoomVisibility>('public');
   const [messageText, setMessageText] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedAvatarFile, setSelectedAvatarFile] = useState<File | null>(null);
@@ -417,6 +435,9 @@ export function ChatApp() {
   const [pendingNotificationMessageId, setPendingNotificationMessageId] = useState<
     string | null
   >(null);
+  const [browserNotificationPermission, setBrowserNotificationPermission] = useState<
+    NotificationPermission | 'unsupported'
+  >('unsupported');
   const [error, setError] = useState('');
   const [isCreatingRoom, setIsCreatingRoom] = useState(false);
   const [isSendingMessage, setIsSendingMessage] = useState(false);
@@ -430,31 +451,73 @@ export function ChatApp() {
   const [showRoomPanel, setShowRoomPanel] = useState(true);
   const [showProfilePanel, setShowProfilePanel] = useState(false);
   const [showNotificationsPanel, setShowNotificationsPanel] = useState(false);
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
   const messageListRef = useRef<HTMLDivElement | null>(null);
   const processingInviteIdsRef = useRef<Set<string>>(new Set());
+  const seenNotificationIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
-    const roomsQuery = query(
+    if (!user) {
+      setRooms([]);
+      return undefined;
+    }
+
+    let publicRooms: Room[] = [];
+    let memberRooms: Room[] = [];
+
+    const syncRooms = () => {
+      const merged = [...publicRooms, ...memberRooms];
+      const uniqueRooms = Array.from(
+        new Map(merged.map((room) => [room.id, room])).values()
+      ).sort(
+        (left, right) => timestampToMs(right.updatedAt) - timestampToMs(left.updatedAt)
+      );
+
+      setRooms(uniqueRooms);
+    };
+
+    const publicRoomsQuery = query(
       collection(db, 'rooms'),
-      orderBy('updatedAt', 'desc'),
-      limit(60)
+      where('kind', '==', 'channel'),
+      where('visibility', '==', 'public'),
+      limit(80)
+    );
+    const memberRoomsQuery = query(
+      collection(db, 'rooms'),
+      where('memberIds', 'array-contains', user.uid),
+      limit(80)
     );
 
-    const unsubscribe = onSnapshot(
-      roomsQuery,
+    const unsubscribePublic = onSnapshot(
+      publicRoomsQuery,
       (snapshot) => {
-        setRooms(snapshot.docs.map((roomDoc) => asRoom(roomDoc.id, roomDoc.data())));
+        publicRooms = snapshot.docs.map((roomDoc) => asRoom(roomDoc.id, roomDoc.data()));
+        syncRooms();
       },
       (caughtError) => {
         setError(caughtError.message);
       }
     );
 
-    return unsubscribe;
-  }, []);
+    const unsubscribeMember = onSnapshot(
+      memberRoomsQuery,
+      (snapshot) => {
+        memberRooms = snapshot.docs.map((roomDoc) => asRoom(roomDoc.id, roomDoc.data()));
+        syncRooms();
+      },
+      (caughtError) => {
+        setError(caughtError.message);
+      }
+    );
+
+    return () => {
+      unsubscribePublic();
+      unsubscribeMember();
+    };
+  }, [user]);
 
   useEffect(() => {
-    const usersQuery = query(collection(db, 'users'), limit(120));
+    const usersQuery = query(collection(db, 'users'), limit(150));
 
     const unsubscribe = onSnapshot(
       usersQuery,
@@ -478,22 +541,22 @@ export function ChatApp() {
     const notificationsQuery = query(
       collection(db, 'notifications'),
       where('recipientId', '==', user.uid),
-      limit(50)
+      limit(80)
     );
 
     const unsubscribe = onSnapshot(
       notificationsQuery,
       (snapshot) => {
-        const nextNotifications = snapshot.docs
-          .map((notificationDoc) =>
-            asNotification(notificationDoc.id, notificationDoc.data())
-          )
-          .sort(
-            (left, right) =>
-              timestampToMs(right.createdAt) - timestampToMs(left.createdAt)
-          );
-
-        setNotifications(nextNotifications);
+        setNotifications(
+          snapshot.docs
+            .map((notificationDoc) =>
+              asNotification(notificationDoc.id, notificationDoc.data())
+            )
+            .sort(
+              (left, right) =>
+                timestampToMs(right.createdAt) - timestampToMs(left.createdAt)
+            )
+        );
       },
       (caughtError) => {
         setError(caughtError.message);
@@ -511,8 +574,8 @@ export function ChatApp() {
 
     const invitesQuery = query(
       collection(db, 'invites'),
-      where('email', '==', user.email),
-      limit(50)
+      where('email', '==', user.email.toLowerCase()),
+      limit(80)
     );
 
     const unsubscribe = onSnapshot(
@@ -533,11 +596,13 @@ export function ChatApp() {
       return [];
     }
 
-    return rooms.filter(
-      (room) =>
-        room.kind === 'channel' ||
-        (room.memberIds || []).includes(user.uid)
-    );
+    return rooms.filter((room) => {
+      if (room.kind === 'direct') {
+        return (room.memberIds || []).includes(user.uid);
+      }
+
+      return room.visibility !== 'private' || (room.memberIds || []).includes(user.uid);
+    });
   }, [rooms, user]);
 
   useEffect(() => {
@@ -563,7 +628,7 @@ export function ChatApp() {
     const messagesQuery = query(
       collection(db, 'rooms', selectedRoomId, 'messages'),
       orderBy('createdAt', 'asc'),
-      limit(200)
+      limit(220)
     );
 
     const unsubscribe = onSnapshot(
@@ -629,7 +694,7 @@ export function ChatApp() {
     const invitesQuery = query(
       collection(db, 'invites'),
       where('roomId', '==', selectedRoomId),
-      limit(50)
+      limit(80)
     );
 
     const unsubscribe = onSnapshot(
@@ -651,6 +716,37 @@ export function ChatApp() {
 
     return unsubscribe;
   }, [selectedRoomId]);
+
+  useEffect(() => {
+    const recentMessagesQuery = query(
+      collectionGroup(db, 'messages'),
+      orderBy('createdAt', 'desc'),
+      limit(220)
+    );
+
+    const unsubscribe = onSnapshot(
+      recentMessagesQuery,
+      (snapshot) => {
+        setRecentMessages(
+          snapshot.docs.map((messageDoc) => {
+            const roomId = messageDoc.ref.parent.parent?.id || '';
+            const room = rooms.find((candidate) => candidate.id === roomId);
+
+            return {
+              roomId,
+              roomLabel: room ? room.name : 'Conversation',
+              message: asMessage(messageDoc.id, messageDoc.data()),
+            };
+          })
+        );
+      },
+      () => {
+        // collection group search is best-effort; chat should still work without it
+      }
+    );
+
+    return unsubscribe;
+  }, [rooms]);
 
   const selectedRoom = useMemo(
     () => visibleRooms.find((room) => room.id === selectedRoomId) || null,
@@ -722,16 +818,58 @@ export function ChatApp() {
     };
   }, [messageText, selectedRoomId, user]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('Notification' in window)) {
+      setBrowserNotificationPermission('unsupported');
+      return;
+    }
+
+    setBrowserNotificationPermission(Notification.permission);
+  }, []);
+
+  useEffect(() => {
+    if (
+      browserNotificationPermission !== 'granted' ||
+      typeof document === 'undefined'
+    ) {
+      notifications.forEach((notification) => {
+        seenNotificationIdsRef.current.add(notification.id);
+      });
+      return;
+    }
+
+    notifications.forEach((notification) => {
+      if (seenNotificationIdsRef.current.has(notification.id)) {
+        return;
+      }
+
+      seenNotificationIdsRef.current.add(notification.id);
+
+      if (!notification.isRead && document.hidden) {
+        // eslint-disable-next-line no-new
+        new Notification(notification.actorName, {
+          body: notification.text,
+          icon: '/branding/logo-primary.jpg',
+        });
+      }
+    });
+  }, [browserNotificationPermission, notifications]);
+
   const currentUserRecord = useMemo(
     () =>
       people.find((person) => person.id === user?.uid) || {
         id: user?.uid || '',
         displayName: user?.displayName || user?.email || 'Denuel User',
         email: user?.email || '',
+        accountStatus: 'active',
         photoURL: user?.photoURL || '',
         bio: '',
         statusMessage: '',
         presenceStatus: 'online',
+        workspaceRole:
+          user?.email?.toLowerCase() === env.primaryAdminEmail.toLowerCase()
+            ? 'admin'
+            : 'member',
         lastSeenAt: null,
       },
     [people, user]
@@ -752,6 +890,7 @@ export function ChatApp() {
   useEffect(() => {
     setChannelNameDraft(selectedRoom?.kind === 'channel' ? selectedRoom.name : '');
     setRoomTopicDraft(selectedRoom?.topic || '');
+    setChannelVisibilityDraft(selectedRoom?.visibility || 'public');
     setEditingMessageId(null);
     setEditingMessageText('');
     setActiveMessageActionId(null);
@@ -810,6 +949,7 @@ export function ChatApp() {
         getRoomLabel(room),
         room.lastMessageText || '',
         room.topic || '',
+        room.visibility || '',
         ...(room.memberNames || []),
       ]
         .join(' ')
@@ -841,6 +981,35 @@ export function ChatApp() {
     [filteredRooms]
   );
 
+  const visibleRoomIds = useMemo(
+    () => new Set(visibleRooms.map((room) => room.id)),
+    [visibleRooms]
+  );
+
+  const filteredMessageResults = useMemo(() => {
+    const searchValue = messageSearch.trim().toLowerCase();
+
+    if (!searchValue) {
+      return [];
+    }
+
+    return recentMessages
+      .filter((result) => visibleRoomIds.has(result.roomId))
+      .filter((result) => {
+        const haystack = [
+          result.roomLabel,
+          result.message.text,
+          result.message.senderName,
+          result.message.parentMessagePreview || '',
+        ]
+          .join(' ')
+          .toLowerCase();
+
+        return haystack.includes(searchValue);
+      })
+      .slice(0, 8);
+  }, [messageSearch, recentMessages, visibleRoomIds]);
+
   const selectedDirectUser = useMemo(() => {
     if (!selectedRoom || selectedRoom.kind !== 'direct' || !user) {
       return null;
@@ -871,7 +1040,7 @@ export function ChatApp() {
   );
 
   const canInvitePeople = canManageRoom;
-
+  const isWorkspaceAdmin = currentUserRecord.workspaceRole === 'admin';
   const isSelectedRoomMember = Boolean(
     selectedRoom?.kind !== 'channel' ||
       !user ||
@@ -1053,7 +1222,10 @@ export function ChatApp() {
           return;
         }
 
-        const roomData = asRoom(roomSnapshot.id, roomSnapshot.data() as Record<string, unknown>);
+        const roomData = asRoom(
+          roomSnapshot.id,
+          roomSnapshot.data() as Record<string, unknown>
+        );
         const nextMemberShape = createMemberShape(
           roomData,
           user.uid,
@@ -1144,6 +1316,7 @@ export function ChatApp() {
         kind: 'channel',
         name: roomName.trim(),
         topic: '',
+        visibility: newChannelVisibility,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
         createdBy: user.uid,
@@ -1157,6 +1330,7 @@ export function ChatApp() {
       });
 
       setRoomName('');
+      setNewChannelVisibility('public');
       setSelectedRoomId(roomReference.id);
     } catch (caughtError) {
       setError(
@@ -1184,6 +1358,7 @@ export function ChatApp() {
           kind: 'direct',
           name: targetUser.displayName || targetUser.email,
           topic: '',
+          visibility: 'private',
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
           createdBy: user.uid,
@@ -1213,6 +1388,11 @@ export function ChatApp() {
       return;
     }
 
+    if (selectedRoom.visibility === 'private') {
+      setError('This private channel requires an invite.');
+      return;
+    }
+
     setIsJoiningRoom(true);
     setError('');
 
@@ -1234,11 +1414,51 @@ export function ChatApp() {
         updatedAt: serverTimestamp(),
       });
     } catch (caughtError) {
-      setError(
-        caughtError instanceof Error ? caughtError.message : 'Join channel failed'
-      );
+      setError(caughtError instanceof Error ? caughtError.message : 'Join channel failed');
     } finally {
       setIsJoiningRoom(false);
+    }
+  };
+
+  const handleUpdateWorkspaceRole = async (
+    targetUser: ChatUser,
+    role: 'member' | 'admin'
+  ) => {
+    if (!isWorkspaceAdmin) {
+      return;
+    }
+
+    try {
+      await updateDoc(doc(db, 'users', targetUser.id), {
+        workspaceRole: role,
+      });
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : 'Workspace role update failed'
+      );
+    }
+  };
+
+  const handleUpdateAccountStatus = async (
+    targetUser: ChatUser,
+    accountStatus: 'active' | 'suspended'
+  ) => {
+    if (!isWorkspaceAdmin || targetUser.id === user?.uid) {
+      return;
+    }
+
+    try {
+      await updateDoc(doc(db, 'users', targetUser.id), {
+        accountStatus,
+      });
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : 'Account moderation failed'
+      );
     }
   };
 
@@ -1277,9 +1497,7 @@ export function ChatApp() {
         type: 'announcement',
       });
     } catch (caughtError) {
-      setError(
-        caughtError instanceof Error ? caughtError.message : 'Role update failed'
-      );
+      setError(caughtError instanceof Error ? caughtError.message : 'Role update failed');
     }
   };
 
@@ -1474,6 +1692,7 @@ export function ChatApp() {
       await updateDoc(doc(db, 'rooms', selectedRoomId), {
         name: nextName,
         topic: roomTopicDraft.trim(),
+        visibility: channelVisibilityDraft,
         updatedAt: serverTimestamp(),
       });
     } catch (caughtError) {
@@ -1564,6 +1783,7 @@ export function ChatApp() {
         acceptedAt: null,
       });
 
+      const inviteUrl = `${env.appUrl}/login?invite=${inviteReference.id}`;
       const existingPerson = people.find(
         (person) => person.email.toLowerCase() === normalizedEmail
       );
@@ -1580,16 +1800,37 @@ export function ChatApp() {
         });
       }
 
-      const inviteUrl = `${env.appUrl}/login?invite=${inviteReference.id}`;
-      const mailtoLink = `mailto:${encodeURIComponent(
-        normalizedEmail
-      )}?subject=${encodeURIComponent(
-        `You're invited to ${selectedRoom.name} on Denuel Chat`
-      )}&body=${encodeURIComponent(
-        `Hello,\n\n${user.displayName || user.email} invited you to join ${selectedRoom.name} on Denuel Chat as ${inviteRole}.\n\nOpen Denuel Chat here: ${inviteUrl}\n\nIf you already have an account, signing in with this email will automatically add you to the room.`
-      )}`;
+      const response = await fetch('/api/invite-email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: normalizedEmail,
+          inviteUrl,
+          inviterName: user.displayName || user.email || 'Denuel User',
+          roomName: selectedRoom.name,
+          role: inviteRole,
+        }),
+      });
 
-      window.open(mailtoLink, '_blank');
+      const result = (await response.json()) as { sent?: boolean; mode?: string; error?: string };
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Invite send failed.');
+      }
+
+      if (!result.sent) {
+        const mailtoLink = `mailto:${encodeURIComponent(
+          normalizedEmail
+        )}?subject=${encodeURIComponent(
+          `You're invited to ${selectedRoom.name} on Denuel Chat`
+        )}&body=${encodeURIComponent(
+          `Hello,\n\n${user.displayName || user.email} invited you to join ${selectedRoom.name} on Denuel Chat as ${inviteRole}.\n\nOpen Denuel Chat here: ${inviteUrl}\n\nIf you already have an account, signing in with this email will automatically add you to the room.`
+        )}`;
+
+        window.open(mailtoLink, '_blank');
+      }
 
       setInviteEmail('');
       setInviteRole('member');
@@ -1637,9 +1878,19 @@ export function ChatApp() {
       try {
         await updateDoc(doc(db, 'notifications', notification.id), { isRead: true });
       } catch {
-        // no-op
+        // keep moving
       }
     }
+  };
+
+  const handleEnableBrowserNotifications = async () => {
+    if (typeof window === 'undefined' || !('Notification' in window)) {
+      setBrowserNotificationPermission('unsupported');
+      return;
+    }
+
+    const permission = await Notification.requestPermission();
+    setBrowserNotificationPermission(permission);
   };
 
   const sendMessage = async () => {
@@ -1676,6 +1927,10 @@ export function ChatApp() {
         roomForWrite?.kind === 'channel' &&
         !(roomForWrite.memberIds || []).includes(user.uid)
       ) {
+        if (roomForWrite.visibility === 'private') {
+          throw new Error('This private channel requires an invite before you can post.');
+        }
+
         const nextMemberShape = createMemberShape(roomForWrite, user.uid, selfName, 'member');
 
         await updateDoc(doc(db, 'rooms', selectedRoomId), {
@@ -1813,6 +2068,11 @@ export function ChatApp() {
     messageElement?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   };
 
+  const handleOpenSearchResult = (result: SearchResult) => {
+    setSelectedRoomId(result.roomId);
+    setPendingNotificationMessageId(result.message.id);
+  };
+
   const handleSignOut = async () => {
     await signOut(auth);
     router.push('/login');
@@ -1881,13 +2141,22 @@ export function ChatApp() {
               onClick={() => setShowNotificationsPanel((current) => !current)}
               type='button'
             >
-              {showNotificationsPanel ? 'Hide alerts' : 'Alerts'}
+              Alerts
               {unreadNotifications > 0 ? (
                 <span className='button-badge'>
                   {unreadNotifications > 99 ? '99+' : unreadNotifications}
                 </span>
               ) : null}
             </button>
+            {isWorkspaceAdmin ? (
+              <button
+                className='button secondary slim'
+                onClick={() => setShowAdminPanel((current) => !current)}
+                type='button'
+              >
+                {showAdminPanel ? 'Close admin' : 'Admin'}
+              </button>
+            ) : null}
           </div>
         </div>
 
@@ -1905,6 +2174,17 @@ export function ChatApp() {
                 </button>
               ) : null}
             </div>
+            {browserNotificationPermission !== 'granted' ? (
+              <button
+                className='button secondary slim'
+                onClick={() => void handleEnableBrowserNotifications()}
+                type='button'
+              >
+                {browserNotificationPermission === 'unsupported'
+                  ? 'Browser notifications unsupported'
+                  : 'Enable browser alerts'}
+              </button>
+            ) : null}
             <div className='notification-list'>
               {notifications.length > 0 ? (
                 notifications.slice(0, 8).map((notification) => (
@@ -1956,6 +2236,16 @@ export function ChatApp() {
             onChange={(event) => setRoomName(event.target.value)}
             required
           />
+          <select
+            className='select'
+            value={newChannelVisibility}
+            onChange={(event) =>
+              setNewChannelVisibility(event.target.value as RoomVisibility)
+            }
+          >
+            <option value='public'>Public channel</option>
+            <option value='private'>Private channel</option>
+          </select>
           <button className='button' disabled={isCreatingRoom} type='submit'>
             {isCreatingRoom ? 'Creating...' : 'Create channel'}
           </button>
@@ -1970,6 +2260,37 @@ export function ChatApp() {
             value={roomSearch}
             onChange={(event) => setRoomSearch(event.target.value)}
           />
+          <input
+            className='input'
+            type='text'
+            placeholder='Search messages across rooms'
+            value={messageSearch}
+            onChange={(event) => setMessageSearch(event.target.value)}
+          />
+          {messageSearch.trim() ? (
+            <div className='room-list'>
+              {filteredMessageResults.length > 0 ? (
+                filteredMessageResults.map((result) => (
+                  <button
+                    key={`${result.roomId}-${result.message.id}`}
+                    className='room-card'
+                    onClick={() => handleOpenSearchResult(result)}
+                    type='button'
+                  >
+                    <div className='room-card-head'>
+                      <strong>{result.roomLabel}</strong>
+                      <span>{formatTimestamp(result.message.createdAt)}</span>
+                    </div>
+                    <span>
+                      {result.message.senderName}: {result.message.text || result.message.attachmentName || 'Attachment'}
+                    </span>
+                  </button>
+                ))
+              ) : (
+                <div className='mini-empty-state'>No messages match yet.</div>
+              )}
+            </div>
+          ) : null}
         </div>
 
         <div className='sidebar-section'>
@@ -1987,7 +2308,9 @@ export function ChatApp() {
                     type='button'
                   >
                     <div className='room-card-head'>
-                      <strong># {room.name}</strong>
+                      <strong>
+                        {room.visibility === 'private' ? 'Lock' : '#'} {room.name}
+                      </strong>
                       {unreadCount > 0 ? (
                         <span className='unread-badge'>
                           {unreadCount > 99 ? '99+' : unreadCount}
@@ -2073,7 +2396,11 @@ export function ChatApp() {
         <div className='chat-main-top'>
           <div>
             <div className='eyebrow'>
-              {selectedRoom?.kind === 'direct' ? 'Direct message' : 'Channel'}
+              {selectedRoom?.kind === 'direct'
+                ? 'Direct message'
+                : selectedRoom?.visibility === 'private'
+                  ? 'Private channel'
+                  : 'Channel'}
             </div>
             <h2 className='chat-room-title'>
               {selectedRoom ? getRoomLabel(selectedRoom) : 'Choose a conversation'}
@@ -2084,7 +2411,9 @@ export function ChatApp() {
                   ? selectedDirectUser?.statusMessage ||
                     formatRelativeSeen(selectedDirectUser?.lastSeenAt)
                   : selectedRoom.topic ||
-                    'Add a channel purpose so teammates know what belongs here.'
+                    (selectedRoom.visibility === 'private'
+                      ? 'This room is invite-only and only visible to members.'
+                      : 'Add a channel purpose so teammates know what belongs here.')
                 : 'Create a channel or open a direct message to get started.'}
             </p>
           </div>
@@ -2112,21 +2441,28 @@ export function ChatApp() {
 
         {selectedRoom && selectedRoom.kind === 'channel' && !isSelectedRoomMember ? (
           <div className='hero-callout hero-callout-inline'>
-            <span>You're viewing a public channel. Join it to manage unread counts and member tools.</span>
-            <button
-              className='button slim'
-              disabled={isJoiningRoom}
-              onClick={() => void handleJoinChannel()}
-              type='button'
-            >
-              {isJoiningRoom ? 'Joining...' : 'Join channel'}
-            </button>
+            <span>
+              {selectedRoom.visibility === 'private'
+                ? 'This private channel is invite-only.'
+                : "You're viewing a public channel. Join it to manage unread counts and member tools."}
+            </span>
+            {selectedRoom.visibility !== 'private' ? (
+              <button
+                className='button slim'
+                disabled={isJoiningRoom}
+                onClick={() => void handleJoinChannel()}
+                type='button'
+              >
+                {isJoiningRoom ? 'Joining...' : 'Join channel'}
+              </button>
+            ) : null}
           </div>
         ) : null}
 
         {selectedRoom &&
         (showRoomPanel ||
           showProfilePanel ||
+          showAdminPanel ||
           pinnedMessages.length > 0 ||
           activeThreadMessage) ? (
           <div className='detail-grid'>
@@ -2157,6 +2493,16 @@ export function ChatApp() {
                       value={roomTopicDraft}
                       onChange={(event) => setRoomTopicDraft(event.target.value)}
                     />
+                    <select
+                      className='select'
+                      value={channelVisibilityDraft}
+                      onChange={(event) =>
+                        setChannelVisibilityDraft(event.target.value as RoomVisibility)
+                      }
+                    >
+                      <option value='public'>Public channel</option>
+                      <option value='private'>Private channel</option>
+                    </select>
                     <button className='button slim' disabled={isSavingRoom} type='submit'>
                       {isSavingRoom ? 'Saving...' : 'Save channel details'}
                     </button>
@@ -2258,7 +2604,7 @@ export function ChatApp() {
               <div className='detail-card'>
                 <div className='detail-card-head'>
                   <strong>Email invites</strong>
-                  <span>Invite people with a prefilled email and auto-join flow.</span>
+                  <span>Send email invites now, with fallback if server email is not configured yet.</span>
                 </div>
                 <form className='form detail-form invite-form' onSubmit={handleInviteByEmail}>
                   <input
@@ -2364,6 +2710,66 @@ export function ChatApp() {
                     {isSavingProfile ? 'Saving...' : 'Save profile'}
                   </button>
                 </form>
+              </div>
+            ) : null}
+
+            {showAdminPanel ? (
+              <div className='detail-card'>
+                <div className='detail-card-head'>
+                  <strong>Workspace admin</strong>
+                  <span>Manage workspace roles and suspend accounts when needed.</span>
+                </div>
+                <div className='member-roster'>
+                  {people.map((person) => (
+                    <div className='member-row' key={person.id}>
+                      <span className='user-card-main'>
+                        <AvatarBadge displayName={person.displayName} photoURL={person.photoURL} />
+                        <span className='user-meta'>
+                          <strong>{person.displayName}</strong>
+                          <span>{person.email}</span>
+                          <span>
+                            {person.workspaceRole || 'member'}
+                            {' · '}
+                            {person.accountStatus || 'active'}
+                          </span>
+                        </span>
+                      </span>
+                      <div className='message-actions'>
+                        <select
+                          className='select'
+                          onChange={(event) =>
+                            void handleUpdateWorkspaceRole(
+                              person,
+                              event.target.value as 'member' | 'admin'
+                            )
+                          }
+                          value={person.workspaceRole || 'member'}
+                        >
+                          <option value='member'>member</option>
+                          <option value='admin'>admin</option>
+                        </select>
+                        {person.id !== user.uid ? (
+                          <button
+                            className='button secondary slim'
+                            onClick={() =>
+                              void handleUpdateAccountStatus(
+                                person,
+                                person.accountStatus === 'suspended'
+                                  ? 'active'
+                                  : 'suspended'
+                              )
+                            }
+                            type='button'
+                          >
+                            {person.accountStatus === 'suspended'
+                              ? 'Restore'
+                              : 'Suspend'}
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             ) : null}
 

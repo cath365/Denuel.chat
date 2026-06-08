@@ -1,6 +1,6 @@
 'use client';
 
-import { onAuthStateChanged, type User } from 'firebase/auth';
+import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
 import {
   createContext,
   useContext,
@@ -8,7 +8,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
+import { doc, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore';
 
 import { auth, db } from '../lib/firebase';
 
@@ -73,6 +73,24 @@ export function FirebaseProvider({ children }: { children: ReactNode }) {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       void syncPresence('offline');
     };
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) {
+      return undefined;
+    }
+
+    const userReference = doc(db, 'users', user.uid);
+
+    const unsubscribe = onSnapshot(userReference, (snapshot) => {
+      const accountStatus = snapshot.data()?.accountStatus;
+
+      if (accountStatus === 'suspended') {
+        void signOut(auth);
+      }
+    });
+
+    return unsubscribe;
   }, [user]);
 
   return (

@@ -15,7 +15,9 @@ export default function LoginPage() {
           </h1>
           <p className='subtitle'>
             This page uses Firebase Authentication for email and password sign
-            in, then opens the Firestore-backed chat experience.
+            in, then opens the Firestore-backed chat experience. If you were
+            invited by email, signing in with that same address will add you to
+            the room automatically.
           </p>
           <div style={{ marginTop: 24 }}>
             <LoginForm />
@@ -38,7 +40,7 @@ export default function LoginPage() {
             </div>
             <div className='meta-item'>
               <strong>After login</strong>
-              <div>Open the <Link href='/chat'>chat shell</Link> to verify realtime room updates.</div>
+              <div>Open the <Link href='/chat'>chat shell</Link> to verify realtime room updates, notifications, and invite access.</div>
             </div>
           </div>
         </section>

@@ -13,6 +13,7 @@ export type Room = {
   memberNames?: string[];
   memberRoles?: Record<string, 'owner' | 'admin' | 'member'>;
   topic?: string;
+  visibility?: 'public' | 'private';
   unreadCounts?: Record<string, number>;
   updatedAt?: { seconds: number; nanoseconds: number } | null;
 };
@@ -44,10 +45,12 @@ export type ChatUser = {
   id: string;
   displayName: string;
   email: string;
+  accountStatus?: 'active' | 'suspended';
   bio?: string;
   photoURL?: string;
   presenceStatus?: PresenceStatus;
   statusMessage?: string;
+  workspaceRole?: 'member' | 'admin';
   lastSeenAt?: { seconds: number; nanoseconds: number } | null;
 };
 

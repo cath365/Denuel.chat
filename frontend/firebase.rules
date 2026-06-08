@@ -11,6 +11,7 @@ service cloud.firestore {
         'kind',
         'name',
         'topic',
+        'visibility',
         'createdAt',
         'updatedAt',
         'createdBy',
@@ -25,7 +26,7 @@ service cloud.firestore {
     }
 
     function roomIsReadable(roomData) {
-      return roomData.kind == 'channel' ||
+      return (roomData.kind == 'channel' && roomData.visibility != 'private') ||
         roomData.memberIds.hasAny([request.auth.uid]);
     }
 
@@ -143,9 +144,18 @@ service cloud.firestore {
       return request.auth.token.email;
     }
 
+    function isWorkspaceAdmin() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.workspaceRole == 'admin';
+    }
+
     match /users/{userId} {
       allow read: if isSignedIn();
-      allow create, update: if isSignedIn() && request.auth.uid == userId;
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow update: if isSignedIn() &&
+        (
+          request.auth.uid == userId ||
+          isWorkspaceAdmin()
+        );
     }
 
     match /notifications/{notificationId} {
@@ -164,7 +174,8 @@ service cloud.firestore {
       allow read: if isSignedIn() &&
         (
           resource.data.invitedById == request.auth.uid ||
-          resource.data.email == signedInEmail()
+          resource.data.email == signedInEmail() ||
+          isWorkspaceAdmin()
         );
       allow create: if isSignedIn() &&
         request.resource.data.invitedById == request.auth.uid &&
@@ -174,7 +185,8 @@ service cloud.firestore {
         isInvitePayload() &&
         (
           resource.data.invitedById == request.auth.uid ||
-          resource.data.email == signedInEmail()
+          resource.data.email == signedInEmail() ||
+          isWorkspaceAdmin()
         );
     }
 

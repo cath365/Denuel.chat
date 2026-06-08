@@ -3,18 +3,22 @@
 import { FirebaseError } from 'firebase/app';
 import {
   createUserWithEmailAndPassword,
+  signOut,
   signInWithEmailAndPassword,
   updateProfile,
 } from 'firebase/auth';
-import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
+import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
+import { env } from '../lib/env';
 import { auth, db } from '../lib/firebase';
 
 const getFriendlyAuthError = (error: unknown) => {
   if (!(error instanceof FirebaseError)) {
-    return 'Authentication failed. Please try again.';
+    return error instanceof Error
+      ? error.message
+      : 'Authentication failed. Please try again.';
   }
 
   switch (error.code) {
@@ -56,18 +60,48 @@ export function AuthForm() {
           email,
           password
         );
+        const normalizedEmail = email.trim().toLowerCase();
+        const isPrimaryAdmin =
+          normalizedEmail === env.primaryAdminEmail.trim().toLowerCase();
 
         await updateProfile(credential.user, {
           displayName: displayName.trim(),
         });
 
         await setDoc(doc(db, 'users', credential.user.uid), {
-          email,
+          email: normalizedEmail,
           displayName: displayName.trim(),
           createdAt: serverTimestamp(),
+          accountStatus: 'active',
+          workspaceRole: isPrimaryAdmin ? 'admin' : 'member',
         });
       } else {
-        await signInWithEmailAndPassword(auth, email, password);
+        const credential = await signInWithEmailAndPassword(auth, email, password);
+        const userReference = doc(db, 'users', credential.user.uid);
+        const userSnapshot = await getDoc(userReference);
+        const normalizedEmail = (credential.user.email || email).trim().toLowerCase();
+        const isPrimaryAdmin =
+          normalizedEmail === env.primaryAdminEmail.trim().toLowerCase();
+        const accountStatus = userSnapshot.data()?.accountStatus;
+
+        if (accountStatus === 'suspended') {
+          await signOut(auth);
+          throw new Error('This account has been suspended by an administrator.');
+        }
+
+        await setDoc(
+          userReference,
+          {
+            email: normalizedEmail,
+            displayName:
+              credential.user.displayName || userSnapshot.data()?.displayName || normalizedEmail,
+            accountStatus: accountStatus || 'active',
+            workspaceRole:
+              userSnapshot.data()?.workspaceRole || (isPrimaryAdmin ? 'admin' : 'member'),
+            lastLoginAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
       }
 
       router.push('/chat');
