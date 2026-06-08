@@ -5,60 +5,110 @@ import { env } from '../lib/env';
 
 export default function HomePage() {
   return (
-    <main className='hero'>
-      <div className='shell grid hero-grid'>
-        <section className='card panel'>
+    <main className='hero home-page'>
+      <div className='shell grid home-layout'>
+        <section className='card panel home-hero-card'>
           <BrandLockup size='lg' subtitle='Realtime messaging' />
-          <span className='eyebrow'>Denuel workspace</span>
+          <span className='eyebrow'>Welcome to Denuel Chat</span>
           <h1 className='title' style={{ fontFamily: 'var(--font-heading)' }}>
-            {env.appName}
+            Conversations that feel calm, fast, and ready for real work.
           </h1>
           <p className='subtitle'>
-            A clean team chat app with channels, direct messages, presence, and
-            file sharing, built for fast collaboration on the web.
+            {env.appName} gives your team a warm, professional space for
+            channels, direct messages, file sharing, unread activity, and live
+            collaboration without the clutter.
           </p>
-          <div className='meta'>
-            <div className='meta-item'>
-              <strong>Channels + DMs</strong>
-              <div>Organize conversations by team space or private thread.</div>
-            </div>
-            <div className='meta-item'>
-              <strong>Live presence</strong>
-              <div>See who is online and jump straight into a direct message.</div>
-            </div>
-            <div className='meta-item'>
-              <strong>Attachments</strong>
-              <div>Share files and image previews right inside the conversation.</div>
-            </div>
+
+          <div className='welcome-strip'>
+            <span>Professional team chat</span>
+            <span>Clean collaboration flow</span>
+            <span>Built for daily use</span>
           </div>
-          <div style={{ marginTop: 24, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+
+          <div className='hero-actions'>
             <Link className='button' href='/login'>
-              Start chatting
+              Open Denuel Chat
             </Link>
             <Link className='button secondary' href='/chat'>
-              View workspace
+              Explore workspace
             </Link>
+          </div>
+
+          <div className='home-kpis'>
+            <div className='home-kpi'>
+              <strong>Channels + DMs</strong>
+              <span>Keep team updates and private conversations organized.</span>
+            </div>
+            <div className='home-kpi'>
+              <strong>Presence + unread focus</strong>
+              <span>See what matters now and pick up where you left off.</span>
+            </div>
+            <div className='home-kpi'>
+              <strong>Files + reactions</strong>
+              <span>Share context quickly and respond naturally in-thread.</span>
+            </div>
           </div>
         </section>
 
-        <section className='card panel'>
-          <div className='meta'>
-            <div className='meta-item'>
-              <strong>Realtime database</strong>
-              <div>Cloud Firestore keeps rooms and messages synced live.</div>
+        <section className='card panel showcase-shell'>
+          <div className='showcase-topline'>
+            <span className='eyebrow'>Workspace preview</span>
+            <span className='showcase-domain'>{env.appUrl}</span>
+          </div>
+
+          <div className='showcase-panel'>
+            <div className='showcase-header'>
+              <div>
+                <strong>Today in Denuel Chat</strong>
+                <div>Everything your team needs in one clear workspace.</div>
+              </div>
+              <span className='presence-pill presence-online'>7 online</span>
             </div>
-            <div className='meta-item'>
-              <strong>Hosting</strong>
-              <div>Next.js frontend deployed to {env.appUrl}</div>
+
+            <div className='showcase-grid'>
+              <div className='showcase-card'>
+                <strong>Channels</strong>
+                <div># product-design</div>
+                <div># launch-room</div>
+                <div># operations</div>
+              </div>
+              <div className='showcase-card'>
+                <strong>Daily flow</strong>
+                <div>Unread counts keep priorities visible.</div>
+                <div>Direct messages stay one tap away.</div>
+              </div>
             </div>
-            <div className='meta-item'>
-              <strong>Identity + storage</strong>
-              <div>Firebase Auth for sign-in and Storage for shared files.</div>
+
+            <div className='activity-feed'>
+              <div className='activity-item'>
+                <span className='avatar-badge avatar-badge-small'>EI</span>
+                <div>
+                  <strong>Launch room</strong>
+                  <span>Shared the final checklist and pinned the release notes.</span>
+                </div>
+              </div>
+              <div className='activity-item'>
+                <span className='avatar-badge avatar-badge-small'>DC</span>
+                <div>
+                  <strong>Support handoff</strong>
+                  <span>Presence and read receipts kept the team aligned.</span>
+                </div>
+              </div>
+              <div className='activity-item'>
+                <span className='avatar-badge avatar-badge-small'>FC</span>
+                <div>
+                  <strong>Faster feedback</strong>
+                  <span>Reactions, uploads, and DMs cut down on back-and-forth.</span>
+                </div>
+              </div>
             </div>
-            <div className='meta-item'>
-              <strong>Project</strong>
-              <div>{env.firebaseProjectId || 'Connect Firebase to continue'}</div>
-            </div>
+          </div>
+
+          <div className='showcase-feature-row'>
+            <div className='showcase-chip'>Firebase Auth</div>
+            <div className='showcase-chip'>Cloud Firestore</div>
+            <div className='showcase-chip'>Realtime presence</div>
+            <div className='showcase-chip'>Secure attachments</div>
           </div>
         </section>
       </div>
