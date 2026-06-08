@@ -2855,13 +2855,15 @@ export function ChatApp() {
                       <div className='message-content'>
                         <div className='message-meta'>
                           <strong>{message.senderName}</strong>
-                          <span>{formatTimestamp(message.createdAt)}</span>
-                          {message.editedAt ? (
-                            <span className='message-flag'>Edited</span>
-                          ) : null}
-                          {message.isPinned ? (
-                            <span className='message-flag'>Pinned</span>
-                          ) : null}
+                          <div className='message-meta-trailing'>
+                            <span>{formatTimestamp(message.createdAt)}</span>
+                            {message.editedAt ? (
+                              <span className='message-flag'>Edited</span>
+                            ) : null}
+                            {message.isPinned ? (
+                              <span className='message-flag'>Pinned</span>
+                            ) : null}
+                          </div>
                         </div>
 
                         {isEditing ? (
@@ -2917,104 +2919,108 @@ export function ChatApp() {
                                     src={message.attachmentUrl}
                                   />
                                 ) : null}
-                                <span>
-                                  {message.attachmentName || 'Attachment'}
-                                  {message.attachmentSize
-                                    ? ` (${formatFileSize(message.attachmentSize)})`
-                                    : ''}
+                                <span className='attachment-copy'>
+                                  <strong>{message.attachmentName || 'Attachment'}</strong>
+                                  <small>
+                                    {message.attachmentSize
+                                      ? formatFileSize(message.attachmentSize)
+                                      : 'Open attachment'}
+                                  </small>
                                 </span>
                               </a>
                             ) : null}
 
-                            {replyCount > 0 ? (
-                              <button
-                                className='thread-summary'
-                                onClick={() => setActiveThreadMessageId(message.id)}
-                                type='button'
-                              >
-                                {replyCount} {replyCount === 1 ? 'reply' : 'replies'} in thread
-                              </button>
-                            ) : null}
+                            <div className='message-footer'>
+                              {replyCount > 0 ? (
+                                <button
+                                  className='thread-summary'
+                                  onClick={() => setActiveThreadMessageId(message.id)}
+                                  type='button'
+                                >
+                                  {replyCount} {replyCount === 1 ? 'reply' : 'replies'} in thread
+                                </button>
+                              ) : null}
 
-                            {!message.isDeleted ? (
-                              <>
-                                <div className='message-reactions'>
-                                  {reactionEntries.map(([emoji, members]) => {
-                                    const userHasReacted = Boolean(members[user.uid]);
+                              {!message.isDeleted ? (
+                                <>
+                                  <div className='message-reactions'>
+                                    {reactionEntries.map(([emoji, members]) => {
+                                      const userHasReacted = Boolean(members[user.uid]);
 
-                                    return (
+                                      return (
+                                        <button
+                                          className={`reaction-chip ${
+                                            userHasReacted ? 'reaction-chip-active' : ''
+                                          }`}
+                                          key={emoji}
+                                          onClick={() =>
+                                            void handleToggleReaction(message.id, emoji)
+                                          }
+                                          type='button'
+                                        >
+                                          <span>{emoji}</span>
+                                          <span>{Object.keys(members).length}</span>
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                  <div className='reaction-picker'>
+                                    {REACTION_OPTIONS.map((emoji) => (
                                       <button
-                                        className={`reaction-chip ${
-                                          userHasReacted ? 'reaction-chip-active' : ''
-                                        }`}
+                                        className='reaction-picker-button'
                                         key={emoji}
                                         onClick={() =>
                                           void handleToggleReaction(message.id, emoji)
                                         }
                                         type='button'
                                       >
-                                        <span>{emoji}</span>
-                                        <span>{Object.keys(members).length}</span>
+                                        {emoji}
                                       </button>
-                                    );
-                                  })}
-                                </div>
-                                <div className='reaction-picker'>
-                                  {REACTION_OPTIONS.map((emoji) => (
-                                    <button
-                                      className='reaction-picker-button'
-                                      key={emoji}
-                                      onClick={() =>
-                                        void handleToggleReaction(message.id, emoji)
-                                      }
-                                      type='button'
-                                    >
-                                      {emoji}
-                                    </button>
-                                  ))}
-                                </div>
-                              </>
-                            ) : null}
+                                    ))}
+                                  </div>
+                                </>
+                              ) : null}
 
-                            <div className='message-actions'>
-                              <button
-                                className='button secondary slim'
-                                onClick={() => setActiveThreadMessageId(message.id)}
-                                type='button'
-                              >
-                                {activeThreadMessageId === message.id ? 'Thread open' : 'Reply'}
-                              </button>
-                              <button
-                                className='button secondary slim'
-                                disabled={isBusy}
-                                onClick={() => void handleTogglePinMessage(message)}
-                                type='button'
-                              >
-                                {isBusy
-                                  ? 'Saving...'
-                                  : message.isPinned
-                                    ? 'Unpin'
-                                    : 'Pin'}
-                              </button>
-                              {isOwnMessage && !message.isDeleted ? (
+                              <div className='message-actions'>
                                 <button
                                   className='button secondary slim'
-                                  onClick={() => handleStartEditingMessage(message)}
+                                  onClick={() => setActiveThreadMessageId(message.id)}
                                   type='button'
                                 >
-                                  Edit
+                                  {activeThreadMessageId === message.id ? 'Thread open' : 'Reply'}
                                 </button>
-                              ) : null}
-                              {isOwnMessage && !message.isDeleted ? (
                                 <button
                                   className='button secondary slim'
                                   disabled={isBusy}
-                                  onClick={() => void handleDeleteMessage(message.id)}
+                                  onClick={() => void handleTogglePinMessage(message)}
                                   type='button'
                                 >
-                                  Delete
+                                  {isBusy
+                                    ? 'Saving...'
+                                    : message.isPinned
+                                      ? 'Unpin'
+                                      : 'Pin'}
                                 </button>
-                              ) : null}
+                                {isOwnMessage && !message.isDeleted ? (
+                                  <button
+                                    className='button secondary slim'
+                                    onClick={() => handleStartEditingMessage(message)}
+                                    type='button'
+                                  >
+                                    Edit
+                                  </button>
+                                ) : null}
+                                {isOwnMessage && !message.isDeleted ? (
+                                  <button
+                                    className='button secondary slim'
+                                    disabled={isBusy}
+                                    onClick={() => void handleDeleteMessage(message.id)}
+                                    type='button'
+                                  >
+                                    Delete
+                                  </button>
+                                ) : null}
+                              </div>
                             </div>
                           </>
                         )}
@@ -3064,6 +3070,11 @@ export function ChatApp() {
 
         <form className='chat-compose-wrap' onSubmit={handleSendMessage}>
           <div className='chat-compose'>
+            <div className='composer-toolbar'>
+              <span className='composer-hint'>
+                Enter to send. Shift+Enter for a new line.
+              </span>
+            </div>
             <textarea
               className='input composer-textarea'
               disabled={!selectedRoomId}
@@ -3074,26 +3085,30 @@ export function ChatApp() {
               value={messageText}
             />
             <div className='compose-actions'>
-              <label className='button secondary slim file-button'>
-                Attach
-                <input
-                  className='file-input'
-                  disabled={!selectedRoomId}
-                  onChange={(event) => setSelectedFile(event.target.files?.[0] || null)}
-                  type='file'
-                />
-              </label>
-              <button
-                className='button slim'
-                disabled={isSendingMessage || !selectedRoomId}
-                type='submit'
-              >
-                {isSendingMessage
-                  ? 'Sending...'
-                  : activeThreadMessage
-                    ? 'Send reply'
-                    : 'Send message'}
-              </button>
+              <div className='compose-actions-start'>
+                <label className='button secondary slim file-button'>
+                  Attach
+                  <input
+                    className='file-input'
+                    disabled={!selectedRoomId}
+                    onChange={(event) => setSelectedFile(event.target.files?.[0] || null)}
+                    type='file'
+                  />
+                </label>
+              </div>
+              <div className='compose-actions-end'>
+                <button
+                  className='button slim'
+                  disabled={isSendingMessage || !selectedRoomId}
+                  type='submit'
+                >
+                  {isSendingMessage
+                    ? 'Sending...'
+                    : activeThreadMessage
+                      ? 'Send reply'
+                      : 'Send message'}
+                </button>
+              </div>
             </div>
           </div>
 
