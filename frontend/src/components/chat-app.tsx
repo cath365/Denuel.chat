@@ -9,6 +9,7 @@ import {
   onSnapshot,
   orderBy,
   query,
+  runTransaction,
   serverTimestamp,
   setDoc,
   updateDoc,
@@ -34,6 +35,8 @@ import type {
 import { BrandLockup } from './brand-lockup';
 import { useFirebaseAuth } from './firebase-provider';
 
+const REACTION_OPTIONS = ['👍', '❤️', '😂', '🔥'];
+
 const asRoom = (id: string, data: Record<string, unknown>): Room => ({
   id,
   kind: data.kind === 'direct' ? 'direct' : 'channel',
@@ -42,12 +45,24 @@ const asRoom = (id: string, data: Record<string, unknown>): Room => ({
   createdByName: String(data.createdByName || 'Unknown'),
   lastMessageText:
     typeof data.lastMessageText === 'string' ? data.lastMessageText : undefined,
+  lastMessageSenderId:
+    typeof data.lastMessageSenderId === 'string'
+      ? data.lastMessageSenderId
+      : undefined,
   memberIds: Array.isArray(data.memberIds)
     ? data.memberIds.map((value) => String(value))
     : [],
   memberNames: Array.isArray(data.memberNames)
     ? data.memberNames.map((value) => String(value))
     : [],
+  unreadCounts:
+    data.unreadCounts && typeof data.unreadCounts === 'object'
+      ? Object.fromEntries(
+          Object.entries(data.unreadCounts as Record<string, unknown>).map(
+            ([userId, count]) => [userId, Number(count) || 0]
+          )
+        )
+      : {},
   createdAt:
     data.createdAt && typeof data.createdAt === 'object'
       ? (data.createdAt as Room['createdAt'])
@@ -71,6 +86,23 @@ const asMessage = (id: string, data: Record<string, unknown>): Message => ({
     typeof data.attachmentType === 'string' ? data.attachmentType : undefined,
   attachmentUrl:
     typeof data.attachmentUrl === 'string' ? data.attachmentUrl : undefined,
+  reactions:
+    data.reactions && typeof data.reactions === 'object'
+      ? Object.fromEntries(
+          Object.entries(data.reactions as Record<string, unknown>).map(
+            ([emoji, members]) => [
+              emoji,
+              members && typeof members === 'object'
+                ? Object.fromEntries(
+                    Object.entries(members as Record<string, unknown>).map(
+                      ([userId, displayName]) => [userId, String(displayName)]
+                    )
+                  )
+                : {},
+            ]
+          )
+        )
+      : {},
   createdAt:
     data.createdAt && typeof data.createdAt === 'object'
       ? (data.createdAt as Message['createdAt'])
@@ -333,14 +365,30 @@ export function ChatApp() {
     messageListRef.current.scrollTop = messageListRef.current.scrollHeight;
   }, [messages, selectedRoomId]);
 
+  const selectedRoom = useMemo(
+    () => visibleRooms.find((room) => room.id === selectedRoomId) || null,
+    [selectedRoomId, visibleRooms]
+  );
+
   useEffect(() => {
-    if (!user || !selectedRoomId) {
+    if (!user || !selectedRoomId || !selectedRoom) {
       return undefined;
     }
 
     const latestMessageId = messages[messages.length - 1]?.id || '';
 
     const timeoutId = window.setTimeout(() => {
+      const nextUnreadCounts = {
+        ...(selectedRoom.unreadCounts || {}),
+        [user.uid]: 0,
+      };
+
+      void setDoc(
+        doc(db, 'rooms', selectedRoomId),
+        { unreadCounts: nextUnreadCounts },
+        { merge: true }
+      );
+
       void setDoc(
         doc(db, 'rooms', selectedRoomId, 'readStates', user.uid),
         {
@@ -355,7 +403,7 @@ export function ChatApp() {
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [messages, selectedRoomId, user]);
+  }, [messages, selectedRoom, selectedRoomId, user]);
 
   useEffect(() => {
     if (!user || !selectedRoomId) {
@@ -378,11 +426,6 @@ export function ChatApp() {
       window.clearTimeout(timeoutId);
     };
   }, [messageText, selectedRoomId, user]);
-
-  const selectedRoom = useMemo(
-    () => visibleRooms.find((room) => room.id === selectedRoomId) || null,
-    [selectedRoomId, visibleRooms]
-  );
 
   const teammates = useMemo(
     () =>
@@ -413,6 +456,14 @@ export function ChatApp() {
     );
 
     return otherMemberId ? getDisplayName(otherMemberId) : room.name;
+  };
+
+  const getUnreadCount = (room: Room) => {
+    if (!user) {
+      return 0;
+    }
+
+    return room.unreadCounts?.[user.uid] || 0;
   };
 
   const roomSearchValue = roomSearch.trim().toLowerCase();
@@ -480,7 +531,9 @@ export function ChatApp() {
   }, [typingStates, user]);
 
   const latestOwnMessage = useMemo(
-    () => [...messages].reverse().find((message) => message.senderId === user?.uid) || null,
+    () =>
+      [...messages].reverse().find((message) => message.senderId === user?.uid) ||
+      null,
     [messages, user]
   );
 
@@ -522,7 +575,9 @@ export function ChatApp() {
         createdByName: selfName,
         memberIds: [user.uid],
         memberNames: [selfName],
+        unreadCounts: { [user.uid]: 0 },
         lastMessageText: '',
+        lastMessageSenderId: '',
       });
 
       setRoomName('');
@@ -560,7 +615,9 @@ export function ChatApp() {
           createdByName: selfName,
           memberIds: [user.uid, targetUser.id],
           memberNames: [selfName, targetUser.displayName || targetUser.email],
+          unreadCounts: { [user.uid]: 0, [targetUser.id]: 0 },
           lastMessageText: '',
+          lastMessageSenderId: '',
         },
         { merge: true }
       );
@@ -571,6 +628,59 @@ export function ChatApp() {
         caughtError instanceof Error
           ? caughtError.message
           : 'Direct message setup failed'
+      );
+    }
+  };
+
+  const handleToggleReaction = async (messageId: string, emoji: string) => {
+    if (!user || !selectedRoomId) {
+      return;
+    }
+
+    try {
+      await runTransaction(db, async (transaction) => {
+        const messageReference = doc(
+          db,
+          'rooms',
+          selectedRoomId,
+          'messages',
+          messageId
+        );
+        const messageSnapshot = await transaction.get(messageReference);
+
+        if (!messageSnapshot.exists()) {
+          return;
+        }
+
+        const data = messageSnapshot.data() as Record<string, unknown>;
+        const reactions =
+          data.reactions && typeof data.reactions === 'object'
+            ? {
+                ...(data.reactions as Record<string, Record<string, string>>),
+              }
+            : {};
+        const currentReaction = { ...(reactions[emoji] || {}) };
+
+        if (currentReaction[user.uid]) {
+          delete currentReaction[user.uid];
+        } else {
+          currentReaction[user.uid] =
+            user.displayName || user.email || 'Denuel User';
+        }
+
+        if (Object.keys(currentReaction).length > 0) {
+          reactions[emoji] = currentReaction;
+        } else {
+          delete reactions[emoji];
+        }
+
+        transaction.update(messageReference, { reactions });
+      });
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : 'Reaction update failed'
       );
     }
   };
@@ -611,11 +721,30 @@ export function ChatApp() {
         attachmentSize,
         attachmentType,
         attachmentUrl,
+        reactions: {},
+      });
+
+      const recipientIds = Array.from(
+        new Set(
+          selectedRoom?.kind === 'direct'
+            ? selectedRoom.memberIds || [user.uid]
+            : [user.uid, ...people.map((person) => person.id)]
+        )
+      );
+      const nextUnreadCounts = { ...(selectedRoom?.unreadCounts || {}) };
+
+      recipientIds.forEach((recipientId) => {
+        nextUnreadCounts[recipientId] =
+          recipientId === user.uid
+            ? 0
+            : (nextUnreadCounts[recipientId] || 0) + 1;
       });
 
       await updateDoc(doc(db, 'rooms', selectedRoomId), {
         lastMessageText:
           trimmedText || (attachmentName ? `Sent ${attachmentName}` : ''),
+        lastMessageSenderId: user.uid,
+        unreadCounts: nextUnreadCounts,
         updatedAt: serverTimestamp(),
       });
 
@@ -745,17 +874,28 @@ export function ChatApp() {
           <div className='room-section-title'>Channels</div>
           <div className='room-list'>
             {channelRooms.length > 0 ? (
-              channelRooms.map((room) => (
-                <button
-                  key={room.id}
-                  className={`room-card ${room.id === selectedRoomId ? 'room-card-active' : ''}`}
-                  onClick={() => setSelectedRoomId(room.id)}
-                  type='button'
-                >
-                  <strong># {room.name}</strong>
-                  <span>{room.lastMessageText || 'No messages yet'}</span>
-                </button>
-              ))
+              channelRooms.map((room) => {
+                const unreadCount = getUnreadCount(room);
+
+                return (
+                  <button
+                    key={room.id}
+                    className={`room-card ${room.id === selectedRoomId ? 'room-card-active' : ''}`}
+                    onClick={() => setSelectedRoomId(room.id)}
+                    type='button'
+                  >
+                    <div className='room-card-head'>
+                      <strong># {room.name}</strong>
+                      {unreadCount > 0 ? (
+                        <span className='unread-badge'>
+                          {unreadCount > 99 ? '99+' : unreadCount}
+                        </span>
+                      ) : null}
+                    </div>
+                    <span>{room.lastMessageText || 'No messages yet'}</span>
+                  </button>
+                );
+              })
             ) : (
               <div className='mini-empty-state'>No channels match this search.</div>
             )}
@@ -766,17 +906,28 @@ export function ChatApp() {
           <div className='room-section-title'>Direct messages</div>
           <div className='room-list'>
             {directRooms.length > 0 ? (
-              directRooms.map((room) => (
-                <button
-                  key={room.id}
-                  className={`room-card ${room.id === selectedRoomId ? 'room-card-active' : ''}`}
-                  onClick={() => setSelectedRoomId(room.id)}
-                  type='button'
-                >
-                  <strong>{getRoomLabel(room)}</strong>
-                  <span>{room.lastMessageText || 'No messages yet'}</span>
-                </button>
-              ))
+              directRooms.map((room) => {
+                const unreadCount = getUnreadCount(room);
+
+                return (
+                  <button
+                    key={room.id}
+                    className={`room-card ${room.id === selectedRoomId ? 'room-card-active' : ''}`}
+                    onClick={() => setSelectedRoomId(room.id)}
+                    type='button'
+                  >
+                    <div className='room-card-head'>
+                      <strong>{getRoomLabel(room)}</strong>
+                      {unreadCount > 0 ? (
+                        <span className='unread-badge'>
+                          {unreadCount > 99 ? '99+' : unreadCount}
+                        </span>
+                      ) : null}
+                    </div>
+                    <span>{room.lastMessageText || 'No messages yet'}</span>
+                  </button>
+                );
+              })
             ) : (
               <div className='mini-empty-state'>No direct messages yet.</div>
             )}
@@ -871,6 +1022,9 @@ export function ChatApp() {
                 !previousMessage ||
                 formatDayLabel(previousMessage.createdAt) !==
                   formatDayLabel(message.createdAt);
+              const reactionEntries = Object.entries(message.reactions || {}).filter(
+                ([, members]) => Object.keys(members).length > 0
+              );
 
               return (
                 <div key={message.id} className='message-stack'>
@@ -918,6 +1072,37 @@ export function ChatApp() {
                             </span>
                           </a>
                         ) : null}
+                        <div className='message-reactions'>
+                          {reactionEntries.map(([emoji, members]) => {
+                            const userHasReacted = Boolean(members[user.uid]);
+
+                            return (
+                              <button
+                                key={emoji}
+                                className={`reaction-chip ${
+                                  userHasReacted ? 'reaction-chip-active' : ''
+                                }`}
+                                onClick={() => void handleToggleReaction(message.id, emoji)}
+                                type='button'
+                              >
+                                <span>{emoji}</span>
+                                <span>{Object.keys(members).length}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <div className='reaction-picker'>
+                          {REACTION_OPTIONS.map((emoji) => (
+                            <button
+                              key={emoji}
+                              className='reaction-picker-button'
+                              onClick={() => void handleToggleReaction(message.id, emoji)}
+                              type='button'
+                            >
+                              {emoji}
+                            </button>
+                          ))}
+                        </div>
                       </div>
                     </div>
                   </article>
@@ -1003,9 +1188,7 @@ export function ChatApp() {
         </form>
 
         {seenByNames.length > 0 ? (
-          <div className='read-receipts'>
-            Seen by {seenByNames.join(', ')}
-          </div>
+          <div className='read-receipts'>Seen by {seenByNames.join(', ')}</div>
         ) : null}
 
         {error ? <div className='auth-error'>{error}</div> : null}

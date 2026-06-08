@@ -16,6 +16,8 @@ This frontend is now a custom Firebase-powered chat app.
 - live presence
 - typing indicators
 - read receipts
+- unread room counts
+- emoji reactions
 - file and image attachments
 - searchable workspace navigation
 

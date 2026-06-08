@@ -15,8 +15,10 @@ service cloud.firestore {
         'createdBy',
         'createdByName',
         'lastMessageText',
+        'lastMessageSenderId',
         'memberIds',
-        'memberNames'
+        'memberNames',
+        'unreadCounts'
       ]);
     }
 
@@ -34,7 +36,8 @@ service cloud.firestore {
         'attachmentName',
         'attachmentSize',
         'attachmentType',
-        'attachmentUrl'
+        'attachmentUrl',
+        'reactions'
       ]);
     }
 
@@ -70,6 +73,9 @@ service cloud.firestore {
           request.resource.data.senderId == request.auth.uid &&
           isMessagePayload() &&
           roomIsReadable(get(/databases/$(database)/documents/rooms/$(roomId)).data);
+        allow update: if isSignedIn() &&
+          roomIsReadable(get(/databases/$(database)/documents/rooms/$(roomId)).data) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions']);
       }
 
       match /readStates/{userId} {

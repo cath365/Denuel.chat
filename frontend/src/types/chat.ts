@@ -8,8 +8,10 @@ export type Room = {
   createdBy: string;
   createdByName: string;
   lastMessageText?: string;
+  lastMessageSenderId?: string;
   memberIds?: string[];
   memberNames?: string[];
+  unreadCounts?: Record<string, number>;
   updatedAt?: { seconds: number; nanoseconds: number } | null;
 };
 
@@ -22,6 +24,7 @@ export type Message = {
   attachmentSize?: number;
   attachmentType?: string;
   attachmentUrl?: string;
+  reactions?: Record<string, Record<string, string>>;
   createdAt?: { seconds: number; nanoseconds: number } | null;
 };
 
