@@ -1,0 +1,37 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isRoomPayload() {
+      return request.resource.data.keys().hasOnly([
+        'name',
+        'createdAt',
+        'updatedAt',
+        'createdBy',
+        'createdByName',
+        'lastMessageText'
+      ]);
+    }
+
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && request.auth.uid == userId;
+    }
+
+    match /rooms/{roomId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isRoomPayload();
+      allow update: if isSignedIn();
+
+      match /messages/{messageId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn() &&
+          request.resource.data.senderId == request.auth.uid;
+      }
+    }
+  }
+}

@@ -1,50 +1,30 @@
 'use client';
 
-import type { FormEvent } from 'react';
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+
+import { useFirebaseAuth } from './firebase-provider';
+import { AuthForm } from './auth-form';
 
 export function LoginForm() {
-  const router = useRouter();
-  const [error, setError] = useState<string | null>(null);
-  const [pending, setPending] = useState(false);
+  const { user, isLoading } = useFirebaseAuth();
 
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setPending(true);
-    setError(null);
+  if (isLoading) {
+    return <div className='status'><span className='dot' /><span>Checking session...</span></div>;
+  }
 
-    const formData = new FormData(event.currentTarget);
-    const response = await fetch('/api/auth/login', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        user: formData.get('user'),
-        password: formData.get('password'),
-      }),
-    });
+  if (user) {
+    return (
+      <div className='grid'>
+        <div className='status'>
+          <span className='dot live' />
+          <span>Signed in as {user.displayName || user.email}</span>
+        </div>
+        <Link className='button' href='/chat'>
+          Open chat
+        </Link>
+      </div>
+    );
+  }
 
-    if (!response.ok) {
-      const data = await response.json().catch(() => ({ error: 'Login failed' }));
-      setError(data.error || 'Login failed');
-      setPending(false);
-      return;
-    }
-
-    router.push('/chat');
-    router.refresh();
-  };
-
-  return (
-    <form className='form' onSubmit={handleSubmit}>
-      <input className='input' type='text' name='user' placeholder='Username or email' required />
-      <input className='input' type='password' name='password' placeholder='Password' required />
-      <button className='button' type='submit' disabled={pending}>
-        {pending ? 'Signing in...' : 'Sign in'}
-      </button>
-      {error ? <div style={{ color: '#fca5a5' }}>{error}</div> : null}
-    </form>
-  );
+  return <AuthForm />;
 }

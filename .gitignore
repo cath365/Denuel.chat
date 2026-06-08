@@ -1,9 +1,14 @@
 .DS_Store
 Thumbs.db
 *.log
+.env.local
+*.local
+frontend/.env.local
 
 /.vscode
 /node_modules
+**/node_modules
+**/.next
 
 /app
 /dist

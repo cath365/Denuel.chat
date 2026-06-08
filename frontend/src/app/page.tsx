@@ -1,5 +1,6 @@
 import Link from 'next/link';
 
+import { BrandLockup } from '../components/brand-lockup';
 import { env } from '../lib/env';
 
 export default function HomePage() {
@@ -7,14 +8,14 @@ export default function HomePage() {
     <main className='hero'>
       <div className='shell grid hero-grid'>
         <section className='card panel'>
+          <BrandLockup size='lg' subtitle='Realtime messaging' />
           <span className='eyebrow'>Secure messaging stack</span>
           <h1 className='title' style={{ fontFamily: 'var(--font-heading)' }}>
             {env.appName}
           </h1>
           <p className='subtitle'>
-            A Vercel-ready frontend that authenticates against the Denuel Chat
-            backend over REST and keeps a realtime WebSocket session open for
-            live updates.
+            A Vercel-ready chat app powered by Firebase Authentication and
+            Cloud Firestore for live rooms, messages, and presence-ready state.
           </p>
           <div style={{ marginTop: 24, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
             <Link className='button' href='/login'>
@@ -29,20 +30,20 @@ export default function HomePage() {
         <section className='card panel'>
           <div className='meta'>
             <div className='meta-item'>
-              <strong>Backend</strong>
-              <div>{env.chatApiUrl}</div>
+              <strong>Realtime database</strong>
+              <div>Cloud Firestore</div>
             </div>
             <div className='meta-item'>
               <strong>Frontend</strong>
               <div>{env.appUrl}</div>
             </div>
             <div className='meta-item'>
-              <strong>WebSocket</strong>
-              <div>{env.websocketUrl}</div>
+              <strong>Auth + sync</strong>
+              <div>Firebase Auth + Firestore</div>
             </div>
             <div className='meta-item'>
-              <strong>Session cookie</strong>
-              <div>{env.sessionCookieName}</div>
+              <strong>Project</strong>
+              <div>{env.firebaseProjectId || 'Add Firebase env vars'}</div>
             </div>
           </div>
         </section>

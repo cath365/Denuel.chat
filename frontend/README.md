@@ -1,27 +1,41 @@
 # Denuel Chat Web
 
+This frontend is now a custom Firebase-powered chat app.
+
+## Stack
+
+- Next.js App Router
+- Firebase Authentication
+- Cloud Firestore realtime listeners
+- Vercel deployment
+
 ## Local development
 
 ```bash
-cp .env.example .env.local
+cp .env.local.example .env.local
 npm install
-npm run dev
+npm run dev:local
 ```
 
-## What this scaffold does
-
-- logs in against Rocket.Chat REST `/api/v1/login`
-- stores the returned `authToken` and `userId` in an `httpOnly` cookie
-- opens a realtime WebSocket connection to `/websocket`
-- provides a clean place to add room, message, and presence APIs
-
-## Production environment
+## Required Firebase env vars
 
 ```dotenv
-CHAT_API_URL=https://chat.denuelchat.com
-NEXT_PUBLIC_CHAT_API=https://chat.denuelchat.com
-NEXT_PUBLIC_CHAT_WS_URL=wss://chat.denuelchat.com/websocket
+NEXT_PUBLIC_FIREBASE_API_KEY=AIzaSyBAYgdj3g8JN58vIAqgYY7pobYguhI0M1Y
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=denuel-chat.firebaseapp.com
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=denuel-chat
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=denuel-chat.firebasestorage.app
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=386994886508
+NEXT_PUBLIC_FIREBASE_APP_ID=1:386994886508:web:4d6468d66d207cadaf0549
 NEXT_PUBLIC_APP_URL=https://app.denuelchat.com
 NEXT_PUBLIC_APP_NAME=Denuel Chat
-SESSION_COOKIE_NAME=denuel_chat_session
 ```
+
+## Firestore structure
+
+- `users/{uid}`
+- `rooms/{roomId}`
+- `rooms/{roomId}/messages/{messageId}`
+
+## Rules
+
+Deploy the sample Firestore rules from `firebase.rules`.

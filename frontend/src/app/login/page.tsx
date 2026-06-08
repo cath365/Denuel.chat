@@ -1,5 +1,6 @@
 import Link from 'next/link';
 
+import { BrandLockup } from '../../components/brand-lockup';
 import { LoginForm } from '../../components/login-form';
 
 export default function LoginPage() {
@@ -7,14 +8,14 @@ export default function LoginPage() {
     <main className='hero'>
       <div className='shell grid hero-grid'>
         <section className='card panel'>
+          <BrandLockup size='lg' subtitle='Account access' />
           <span className='eyebrow'>Authentication</span>
           <h1 className='title' style={{ fontFamily: 'var(--font-heading)' }}>
             Sign in to Denuel Chat
           </h1>
           <p className='subtitle'>
-            This page exchanges credentials with the Denuel Chat backend over
-            HTTPS and
-            stores the returned auth token in a secure `httpOnly` cookie.
+            This page uses Firebase Authentication for email and password sign
+            in, then opens the Firestore-backed chat experience.
           </p>
           <div style={{ marginTop: 24 }}>
             <LoginForm />
@@ -25,17 +26,15 @@ export default function LoginPage() {
           <div className='meta'>
             <div className='meta-item'>
               <strong>Security</strong>
-              <div>Cookies are `httpOnly`, `sameSite=lax`, and `secure` in production.</div>
+              <div>Firebase Auth handles identity, and Firestore rules protect chat data.</div>
             </div>
             <div className='meta-item'>
               <strong>Backend auth</strong>
-              <div>Denuel Chat REST `/api/v1/login`</div>
+              <div>Firebase email/password authentication</div>
             </div>
             <div className='meta-item'>
               <strong>After login</strong>
-              <div>
-                Open the <Link href='/chat'>chat shell</Link> to verify the realtime connection.
-              </div>
+              <div>Open the <Link href='/chat'>chat shell</Link> to verify realtime room updates.</div>
             </div>
           </div>
         </section>
