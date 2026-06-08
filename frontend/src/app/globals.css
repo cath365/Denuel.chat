@@ -34,12 +34,13 @@ a {
 }
 
 button,
-input {
+input,
+textarea {
   font: inherit;
 }
 
 .shell {
-  width: min(1120px, calc(100vw - 32px));
+  width: min(1180px, calc(100vw - 32px));
   margin: 0 auto;
 }
 
@@ -123,7 +124,7 @@ input {
 
 .subtitle {
   margin: 0;
-  max-width: 36rem;
+  max-width: 40rem;
   color: var(--muted);
   line-height: 1.7;
 }
@@ -146,11 +147,21 @@ input {
   color: var(--text);
 }
 
+.input::placeholder,
+.composer-textarea::placeholder {
+  color: rgba(210, 200, 177, 0.7);
+}
+
 .button {
   background: linear-gradient(135deg, var(--accent-strong), var(--accent));
   color: #111111;
   font-weight: 700;
   cursor: pointer;
+  transition: transform 140ms ease, opacity 140ms ease, border-color 140ms ease;
+}
+
+.button:hover {
+  transform: translateY(-1px);
 }
 
 .button.secondary {
@@ -161,6 +172,7 @@ input {
 .button:disabled {
   opacity: 0.65;
   cursor: not-allowed;
+  transform: none;
 }
 
 .meta {
@@ -169,11 +181,23 @@ input {
   margin-top: 24px;
 }
 
-.meta-item {
+.meta-item,
+.summary-card {
   padding: 14px 16px;
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid var(--border);
+}
+
+.meta-item strong,
+.summary-card strong {
+  display: block;
+}
+
+.meta-item div,
+.summary-card span {
+  color: var(--muted);
+  margin-top: 4px;
 }
 
 .status {
@@ -210,7 +234,7 @@ input {
 .chat-layout {
   display: grid;
   gap: 24px;
-  grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
+  grid-template-columns: minmax(300px, 360px) minmax(0, 1fr);
 }
 
 .chat-sidebar,
@@ -222,6 +246,12 @@ input {
   display: grid;
   gap: 20px;
   align-content: start;
+}
+
+.sidebar-summary {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .sidebar-section {
@@ -240,13 +270,26 @@ input {
 .chat-sidebar-head,
 .chat-main-head,
 .message-meta,
-.chat-compose,
 .file-chip,
 .user-card {
   display: flex;
   gap: 12px;
   align-items: center;
   justify-content: space-between;
+}
+
+.chat-main-head {
+  align-items: flex-start;
+}
+
+.chat-header-meta {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.summary-card-compact {
+  min-width: 150px;
 }
 
 .room-list,
@@ -283,6 +326,14 @@ input {
   background: rgba(247, 241, 225, 0.08);
 }
 
+.mini-empty-state {
+  color: var(--muted);
+  border: 1px dashed var(--border);
+  border-radius: 18px;
+  padding: 16px;
+  font-size: 0.92rem;
+}
+
 .user-meta {
   display: grid;
   gap: 4px;
@@ -311,17 +362,49 @@ input {
   color: var(--muted);
 }
 
+.chat-main {
+  display: grid;
+  gap: 20px;
+}
+
+.hero-callout {
+  display: grid;
+  gap: 8px;
+  padding: 18px 20px;
+  border-radius: 20px;
+  border: 1px dashed var(--border);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.hero-callout span {
+  color: var(--muted);
+}
+
 .message-list {
-  flex: 1;
   overflow: auto;
   min-height: 420px;
   max-height: 55vh;
   padding-right: 4px;
+  align-content: start;
 }
 
-.chat-main {
+.message-stack {
   display: grid;
-  gap: 20px;
+  gap: 10px;
+}
+
+.message-day-separator {
+  display: flex;
+  justify-content: center;
+}
+
+.message-day-separator span {
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--muted);
+  font-size: 0.82rem;
+  border: 1px solid var(--border);
 }
 
 .message-card {
@@ -329,7 +412,7 @@ input {
   background: rgba(255, 255, 255, 0.04);
   border-radius: 20px 20px 20px 8px;
   padding: 14px 16px;
-  max-width: min(640px, 100%);
+  max-width: min(680px, 100%);
 }
 
 .message-card-own {
@@ -342,6 +425,11 @@ input {
   margin-bottom: 8px;
   color: var(--muted);
   font-size: 0.9rem;
+}
+
+.message-body {
+  line-height: 1.65;
+  white-space: pre-wrap;
 }
 
 .attachment-link {
@@ -364,11 +452,40 @@ input {
   min-height: 220px;
   border: 1px dashed var(--border);
   border-radius: 18px;
+  text-align: center;
+}
+
+.empty-state-copy {
+  display: grid;
+  gap: 8px;
 }
 
 .slim {
   width: auto;
   padding-inline: 14px;
+}
+
+.chat-compose-wrap {
+  display: grid;
+  gap: 12px;
+}
+
+.chat-compose {
+  display: grid;
+  gap: 12px;
+}
+
+.composer-textarea {
+  min-height: 120px;
+  resize: vertical;
+  line-height: 1.6;
+}
+
+.compose-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
 }
 
 .file-button {
@@ -400,7 +517,11 @@ input {
     min-height: auto;
   }
 
-  .chat-compose,
+  .sidebar-summary,
+  .chat-header-meta {
+    grid-template-columns: 1fr;
+  }
+
   .file-chip,
   .user-card {
     flex-wrap: wrap;

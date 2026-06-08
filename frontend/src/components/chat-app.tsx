@@ -15,7 +15,13 @@ import {
 } from 'firebase/firestore';
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from 'react';
 
 import { auth, db, storage } from '../lib/firebase';
 import type { ChatUser, Message, Room } from '../types/chat';
@@ -94,6 +100,20 @@ const formatTimestamp = (
   });
 };
 
+const formatDayLabel = (
+  timestamp?: { seconds: number; nanoseconds: number } | null
+) => {
+  if (!timestamp) {
+    return 'Now';
+  }
+
+  return new Date(timestamp.seconds * 1000).toLocaleDateString([], {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  });
+};
+
 const createDirectRoomId = (currentUserId: string, targetUserId: string) =>
   ['dm', ...[currentUserId, targetUserId].sort()].join('_');
 
@@ -103,7 +123,7 @@ const formatFileSize = (size?: number) => {
   }
 
   if (size < 1024 * 1024) {
-    return `${Math.round(size / 1024)} KB`;
+    return `${Math.max(1, Math.round(size / 1024))} KB`;
   }
 
   return `${(size / (1024 * 1024)).toFixed(1)} MB`;
@@ -117,11 +137,13 @@ export function ChatApp() {
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [roomName, setRoomName] = useState('');
+  const [roomSearch, setRoomSearch] = useState('');
   const [messageText, setMessageText] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [error, setError] = useState('');
   const [isCreatingRoom, setIsCreatingRoom] = useState(false);
   const [isSendingMessage, setIsSendingMessage] = useState(false);
+  const messageListRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const roomsQuery = query(
@@ -133,10 +155,7 @@ export function ChatApp() {
     const unsubscribe = onSnapshot(
       roomsQuery,
       (snapshot) => {
-        const nextRooms = snapshot.docs.map((room) =>
-          asRoom(room.id, room.data())
-        );
-        setRooms(nextRooms);
+        setRooms(snapshot.docs.map((room) => asRoom(room.id, room.data())));
       },
       (caughtError) => {
         setError(caughtError.message);
@@ -152,10 +171,7 @@ export function ChatApp() {
     const unsubscribe = onSnapshot(
       usersQuery,
       (snapshot) => {
-        const nextPeople = snapshot.docs.map((person) =>
-          asChatUser(person.id, person.data())
-        );
-        setPeople(nextPeople);
+        setPeople(snapshot.docs.map((person) => asChatUser(person.id, person.data())));
       },
       (caughtError) => {
         setError(caughtError.message);
@@ -214,29 +230,30 @@ export function ChatApp() {
     return unsubscribe;
   }, [selectedRoomId]);
 
+  useEffect(() => {
+    if (!messageListRef.current) {
+      return;
+    }
+
+    messageListRef.current.scrollTop = messageListRef.current.scrollHeight;
+  }, [messages, selectedRoomId]);
+
   const selectedRoom = useMemo(
     () => visibleRooms.find((room) => room.id === selectedRoomId) || null,
     [selectedRoomId, visibleRooms]
-  );
-
-  const channelRooms = useMemo(
-    () => visibleRooms.filter((room) => room.kind === 'channel'),
-    [visibleRooms]
-  );
-
-  const directRooms = useMemo(
-    () => visibleRooms.filter((room) => room.kind === 'direct'),
-    [visibleRooms]
   );
 
   const teammates = useMemo(
     () =>
       people
         .filter((person) => person.id !== user?.uid)
-        .sort((left, right) =>
-          left.displayName.localeCompare(right.displayName)
-        ),
+        .sort((left, right) => left.displayName.localeCompare(right.displayName)),
     [people, user]
+  );
+
+  const onlineTeammates = useMemo(
+    () => teammates.filter((person) => person.presenceStatus === 'online').length,
+    [teammates]
   );
 
   const getDisplayName = (targetUserId: string) => {
@@ -256,6 +273,58 @@ export function ChatApp() {
 
     return otherMemberId ? getDisplayName(otherMemberId) : room.name;
   };
+
+  const roomSearchValue = roomSearch.trim().toLowerCase();
+
+  const filteredRooms = useMemo(() => {
+    if (!roomSearchValue) {
+      return visibleRooms;
+    }
+
+    return visibleRooms.filter((room) => {
+      const haystack = [
+        getRoomLabel(room),
+        room.lastMessageText || '',
+        ...(room.memberNames || []),
+      ]
+        .join(' ')
+        .toLowerCase();
+
+      return haystack.includes(roomSearchValue);
+    });
+  }, [getRoomLabel, roomSearchValue, visibleRooms]);
+
+  const filteredTeammates = useMemo(() => {
+    if (!roomSearchValue) {
+      return teammates;
+    }
+
+    return teammates.filter((person) =>
+      `${person.displayName} ${person.email}`.toLowerCase().includes(roomSearchValue)
+    );
+  }, [roomSearchValue, teammates]);
+
+  const channelRooms = useMemo(
+    () => filteredRooms.filter((room) => room.kind === 'channel'),
+    [filteredRooms]
+  );
+
+  const directRooms = useMemo(
+    () => filteredRooms.filter((room) => room.kind === 'direct'),
+    [filteredRooms]
+  );
+
+  const selectedDirectUser = useMemo(() => {
+    if (!selectedRoom || selectedRoom.kind !== 'direct' || !user) {
+      return null;
+    }
+
+    const otherMemberId = (selectedRoom.memberIds || []).find(
+      (memberId) => memberId !== user.uid
+    );
+
+    return teammates.find((person) => person.id === otherMemberId) || null;
+  }, [selectedRoom, teammates, user]);
 
   const handleCreateRoom = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -331,11 +400,7 @@ export function ChatApp() {
     }
   };
 
-  const handleSendMessage = async (
-    event: React.FormEvent<HTMLFormElement>
-  ) => {
-    event.preventDefault();
-
+  const sendMessage = async () => {
     if (!user || !selectedRoomId || (!messageText.trim() && !selectedFile)) {
       return;
     }
@@ -392,6 +457,22 @@ export function ChatApp() {
     }
   };
 
+  const handleSendMessage = async (
+    event: React.FormEvent<HTMLFormElement>
+  ) => {
+    event.preventDefault();
+    await sendMessage();
+  };
+
+  const handleComposerKeyDown = async (
+    event: KeyboardEvent<HTMLTextAreaElement>
+  ) => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      await sendMessage();
+    }
+  };
+
   const handleSignOut = async () => {
     await signOut(auth);
     router.push('/login');
@@ -435,6 +516,21 @@ export function ChatApp() {
           </button>
         </div>
 
+        <div className='sidebar-summary'>
+          <div className='summary-card'>
+            <strong>{channelRooms.length}</strong>
+            <span>Channels</span>
+          </div>
+          <div className='summary-card'>
+            <strong>{onlineTeammates}</strong>
+            <span>Online</span>
+          </div>
+          <div className='summary-card'>
+            <strong>{directRooms.length}</strong>
+            <span>DMs</span>
+          </div>
+        </div>
+
         <form className='form' onSubmit={handleCreateRoom}>
           <input
             className='input'
@@ -450,58 +546,85 @@ export function ChatApp() {
         </form>
 
         <div className='sidebar-section'>
+          <div className='room-section-title'>Search workspace</div>
+          <input
+            className='input'
+            type='text'
+            placeholder='Search rooms or people'
+            value={roomSearch}
+            onChange={(event) => setRoomSearch(event.target.value)}
+          />
+        </div>
+
+        <div className='sidebar-section'>
           <div className='room-section-title'>Channels</div>
           <div className='room-list'>
-            {channelRooms.map((room) => (
-              <button
-                key={room.id}
-                className={`room-card ${room.id === selectedRoomId ? 'room-card-active' : ''}`}
-                onClick={() => setSelectedRoomId(room.id)}
-                type='button'
-              >
-                <strong>{room.name}</strong>
-                <span>{room.lastMessageText || 'No messages yet'}</span>
-              </button>
-            ))}
+            {channelRooms.length > 0 ? (
+              channelRooms.map((room) => (
+                <button
+                  key={room.id}
+                  className={`room-card ${room.id === selectedRoomId ? 'room-card-active' : ''}`}
+                  onClick={() => setSelectedRoomId(room.id)}
+                  type='button'
+                >
+                  <strong># {room.name}</strong>
+                  <span>{room.lastMessageText || 'No messages yet'}</span>
+                </button>
+              ))
+            ) : (
+              <div className='mini-empty-state'>No channels match this search.</div>
+            )}
           </div>
         </div>
 
         <div className='sidebar-section'>
           <div className='room-section-title'>Direct messages</div>
           <div className='room-list'>
-            {directRooms.map((room) => (
-              <button
-                key={room.id}
-                className={`room-card ${room.id === selectedRoomId ? 'room-card-active' : ''}`}
-                onClick={() => setSelectedRoomId(room.id)}
-                type='button'
-              >
-                <strong>{getRoomLabel(room)}</strong>
-                <span>{room.lastMessageText || 'No messages yet'}</span>
-              </button>
-            ))}
+            {directRooms.length > 0 ? (
+              directRooms.map((room) => (
+                <button
+                  key={room.id}
+                  className={`room-card ${room.id === selectedRoomId ? 'room-card-active' : ''}`}
+                  onClick={() => setSelectedRoomId(room.id)}
+                  type='button'
+                >
+                  <strong>{getRoomLabel(room)}</strong>
+                  <span>{room.lastMessageText || 'No messages yet'}</span>
+                </button>
+              ))
+            ) : (
+              <div className='mini-empty-state'>No direct messages yet.</div>
+            )}
           </div>
         </div>
 
         <div className='sidebar-section'>
           <div className='room-section-title'>People</div>
           <div className='presence-list'>
-            {teammates.map((person) => (
-              <button
-                key={person.id}
-                className='user-card'
-                onClick={() => void handleOpenDirectMessage(person)}
-                type='button'
-              >
-                <span className='user-meta'>
-                  <strong>{person.displayName}</strong>
-                  <span>{person.email}</span>
-                </span>
-                <span className={`presence-pill presence-${person.presenceStatus || 'offline'}`}>
-                  {person.presenceStatus || 'offline'}
-                </span>
-              </button>
-            ))}
+            {filteredTeammates.length > 0 ? (
+              filteredTeammates.map((person) => (
+                <button
+                  key={person.id}
+                  className='user-card'
+                  onClick={() => void handleOpenDirectMessage(person)}
+                  type='button'
+                >
+                  <span className='user-meta'>
+                    <strong>{person.displayName}</strong>
+                    <span>{person.email}</span>
+                  </span>
+                  <span
+                    className={`presence-pill presence-${
+                      person.presenceStatus || 'offline'
+                    }`}
+                  >
+                    {person.presenceStatus || 'offline'}
+                  </span>
+                </button>
+              ))
+            ) : (
+              <div className='mini-empty-state'>No teammates match this search.</div>
+            )}
           </div>
         </div>
       </aside>
@@ -513,101 +636,159 @@ export function ChatApp() {
               {selectedRoom?.kind === 'direct' ? 'Direct message' : 'Realtime chat'}
             </div>
             <h2 style={{ margin: '12px 0 4px', fontFamily: 'var(--font-heading)' }}>
-              {selectedRoom ? getRoomLabel(selectedRoom) : 'Pick a room'}
+              {selectedRoom
+                ? selectedRoom.kind === 'channel'
+                  ? `# ${selectedRoom.name}`
+                  : getRoomLabel(selectedRoom)
+                : 'Pick a room'}
             </h2>
           </div>
+          {selectedRoom ? (
+            <div className='chat-header-meta'>
+              <div className='summary-card summary-card-compact'>
+                <strong>
+                  {selectedRoom.kind === 'direct'
+                    ? selectedDirectUser?.presenceStatus || 'offline'
+                    : `${selectedRoom.memberIds?.length || 1} members`}
+                </strong>
+                <span>
+                  {selectedRoom.kind === 'direct'
+                    ? selectedDirectUser?.email || 'Direct chat'
+                    : 'Workspace room'}
+                </span>
+              </div>
+              <div className='summary-card summary-card-compact'>
+                <strong>{formatDayLabel(selectedRoom.updatedAt)}</strong>
+                <span>Latest activity</span>
+              </div>
+            </div>
+          ) : null}
         </div>
 
-        <div className='message-list'>
+        {!selectedRoom ? (
+          <div className='hero-callout'>
+            <strong>Choose a space to begin</strong>
+            <span>
+              Create a channel for your team, or start a direct message from
+              the people list.
+            </span>
+          </div>
+        ) : null}
+
+        <div className='message-list' ref={messageListRef}>
           {messages.length > 0 ? (
-            messages.map((message) => (
-              <article
-                key={message.id}
-                className={`message-card ${
-                  message.senderId === user.uid ? 'message-card-own' : ''
-                }`}
-              >
-                <div className='message-meta'>
-                  <strong>{message.senderName}</strong>
-                  <span>{formatTimestamp(message.createdAt)}</span>
-                </div>
-                {message.text ? <div>{message.text}</div> : null}
-                {message.attachmentUrl ? (
-                  <a
-                    className='attachment-link'
-                    href={message.attachmentUrl}
-                    rel='noreferrer'
-                    target='_blank'
+            messages.map((message, index) => {
+              const previousMessage = messages[index - 1];
+              const showDayLabel =
+                !previousMessage ||
+                formatDayLabel(previousMessage.createdAt) !==
+                  formatDayLabel(message.createdAt);
+
+              return (
+                <div key={message.id} className='message-stack'>
+                  {showDayLabel ? (
+                    <div className='message-day-separator'>
+                      <span>{formatDayLabel(message.createdAt)}</span>
+                    </div>
+                  ) : null}
+                  <article
+                    className={`message-card ${
+                      message.senderId === user.uid ? 'message-card-own' : ''
+                    }`}
                   >
-                    {message.attachmentType?.startsWith('image/') ? (
-                      <img
-                        alt={message.attachmentName || 'Attachment'}
-                        className='attachment-preview'
-                        src={message.attachmentUrl}
-                      />
+                    <div className='message-meta'>
+                      <strong>{message.senderName}</strong>
+                      <span>{formatTimestamp(message.createdAt)}</span>
+                    </div>
+                    {message.text ? <div className='message-body'>{message.text}</div> : null}
+                    {message.attachmentUrl ? (
+                      <a
+                        className='attachment-link'
+                        href={message.attachmentUrl}
+                        rel='noreferrer'
+                        target='_blank'
+                      >
+                        {message.attachmentType?.startsWith('image/') ? (
+                          <img
+                            alt={message.attachmentName || 'Attachment'}
+                            className='attachment-preview'
+                            src={message.attachmentUrl}
+                          />
+                        ) : null}
+                        <span>
+                          {message.attachmentName || 'Attachment'}
+                          {message.attachmentSize
+                            ? ` (${formatFileSize(message.attachmentSize)})`
+                            : ''}
+                        </span>
+                      </a>
                     ) : null}
-                    <span>
-                      {message.attachmentName || 'Attachment'}
-                      {message.attachmentSize
-                        ? ` (${formatFileSize(message.attachmentSize)})`
-                        : ''}
-                    </span>
-                  </a>
-                ) : null}
-              </article>
-            ))
+                  </article>
+                </div>
+              );
+            })
           ) : (
             <div className='empty-state'>
-              {selectedRoomId
-                ? 'No messages yet. Send the first one.'
-                : 'Create a channel or open a direct message to start chatting.'}
+              {selectedRoomId ? (
+                <div className='empty-state-copy'>
+                  <strong>No messages yet</strong>
+                  <span>Start with a greeting, a question, or a file upload.</span>
+                </div>
+              ) : (
+                'Create a channel or open a direct message to start chatting.'
+              )}
             </div>
           )}
         </div>
 
-        <form className='chat-compose' onSubmit={handleSendMessage}>
-          <input
-            className='input'
-            type='text'
-            placeholder='Write a message'
-            value={messageText}
-            onChange={(event) => setMessageText(event.target.value)}
-            disabled={!selectedRoomId}
-          />
-          <label className='button secondary slim file-button'>
-            Attach
-            <input
-              className='file-input'
+        <form className='chat-compose-wrap' onSubmit={handleSendMessage}>
+          <div className='chat-compose'>
+            <textarea
+              className='input composer-textarea'
+              placeholder='Write a message. Press Enter to send, Shift+Enter for a new line.'
+              value={messageText}
+              onChange={(event) => setMessageText(event.target.value)}
+              onKeyDown={handleComposerKeyDown}
               disabled={!selectedRoomId}
-              onChange={(event) =>
-                setSelectedFile(event.target.files?.[0] || null)
-              }
-              type='file'
+              rows={3}
             />
-          </label>
-          <button
-            className='button slim'
-            type='submit'
-            disabled={!selectedRoomId || isSendingMessage}
-          >
-            {isSendingMessage ? 'Sending...' : 'Send'}
-          </button>
-        </form>
-
-        {selectedFile ? (
-          <div className='file-chip'>
-            <span>
-              Ready to send: {selectedFile.name} ({formatFileSize(selectedFile.size)})
-            </span>
-            <button
-              className='button secondary slim'
-              onClick={() => setSelectedFile(null)}
-              type='button'
-            >
-              Remove
-            </button>
+            <div className='compose-actions'>
+              <label className='button secondary slim file-button'>
+                Attach
+                <input
+                  className='file-input'
+                  disabled={!selectedRoomId}
+                  onChange={(event) =>
+                    setSelectedFile(event.target.files?.[0] || null)
+                  }
+                  type='file'
+                />
+              </label>
+              <button
+                className='button slim'
+                type='submit'
+                disabled={!selectedRoomId || isSendingMessage}
+              >
+                {isSendingMessage ? 'Sending...' : 'Send'}
+              </button>
+            </div>
           </div>
-        ) : null}
+
+          {selectedFile ? (
+            <div className='file-chip'>
+              <span>
+                Ready to send: {selectedFile.name} ({formatFileSize(selectedFile.size)})
+              </span>
+              <button
+                className='button secondary slim'
+                onClick={() => setSelectedFile(null)}
+                type='button'
+              >
+                Remove
+              </button>
+            </div>
+          ) : null}
+        </form>
 
         {error ? <div className='auth-error'>{error}</div> : null}
       </section>
