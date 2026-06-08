@@ -57,6 +57,36 @@ textarea {
   margin: 0 auto;
 }
 
+.logo-splash {
+  min-height: 70vh;
+  display: grid;
+  place-items: center;
+}
+
+.logo-splash-mark {
+  width: 144px;
+  height: 144px;
+  display: grid;
+  place-items: center;
+  padding: 12px;
+  border-radius: 36px;
+  border: 1px solid var(--border-strong);
+  background:
+    radial-gradient(circle at top left, rgba(217, 191, 132, 0.18), transparent 42%),
+    rgba(255, 255, 255, 0.03);
+  box-shadow:
+    0 20px 44px rgba(0, 0, 0, 0.34),
+    inset 0 1px 0 rgba(255, 248, 231, 0.08);
+  animation: logoPulse 1.8s ease-in-out infinite;
+}
+
+.logo-splash-image {
+  width: 100%;
+  height: 100%;
+  border-radius: 28px;
+  object-fit: cover;
+}
+
 .hero {
   min-height: 100vh;
   display: grid;
@@ -1209,6 +1239,24 @@ textarea {
   40% {
     transform: translateY(-4px);
     opacity: 1;
+  }
+}
+
+@keyframes logoPulse {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow:
+      0 20px 44px rgba(0, 0, 0, 0.34),
+      inset 0 1px 0 rgba(255, 248, 231, 0.08);
+  }
+
+  50% {
+    transform: scale(1.03);
+    box-shadow:
+      0 24px 54px rgba(0, 0, 0, 0.42),
+      0 0 0 10px rgba(217, 191, 132, 0.04),
+      inset 0 1px 0 rgba(255, 248, 231, 0.08);
   }
 }
 

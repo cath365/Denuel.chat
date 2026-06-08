@@ -37,6 +37,7 @@ import type {
   Room,
 } from '../types/chat';
 import { BrandLockup } from './brand-lockup';
+import { LogoSplash } from './logo-splash';
 import { useFirebaseAuth } from './firebase-provider';
 
 const REACTION_OPTIONS = ['👍', '❤️', '😂', '🔥'];
@@ -1818,14 +1819,7 @@ export function ChatApp() {
   };
 
   if (isLoading) {
-    return (
-      <div className='card panel'>
-        <div className='status'>
-          <span className='dot' />
-          <span>Loading Denuel Chat...</span>
-        </div>
-      </div>
-    );
+    return <LogoSplash />;
   }
 
   if (!user) {
