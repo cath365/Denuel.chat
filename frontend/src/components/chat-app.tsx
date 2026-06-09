@@ -990,6 +990,7 @@ export function ChatApp() {
       },
     [people, user]
   );
+  const visibleError = error.toLowerCase().includes('timed out') ? '' : error;
 
   useEffect(() => {
     if (!user) {
@@ -3310,7 +3311,7 @@ export function ChatApp() {
           </div>
         ) : null}
 
-        {error ? <div className='auth-error'>{error}</div> : null}
+        {visibleError ? <div className='auth-error'>{visibleError}</div> : null}
 
         <form className='chat-compose-wrap' onSubmit={handleSendMessage}>
           <div className='chat-compose'>
