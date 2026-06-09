@@ -2847,7 +2847,7 @@ export function ChatApp() {
               <div className='detail-card'>
                 <div className='detail-card-head'>
                   <strong>Email invites</strong>
-                  <span>Send email invites now, with fallback if server email is not configured yet.</span>
+                  <span>Invite people into the room with a clean share flow.</span>
                 </div>
                 <form className='form detail-form invite-form' onSubmit={handleInviteByEmail}>
                   <input
