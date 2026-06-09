@@ -743,6 +743,28 @@ textarea {
   justify-content: flex-end;
 }
 
+.workspace-toolbar {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 14px 0 4px;
+}
+
+.workspace-toolbar-button {
+  border-color: var(--border);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.workspace-toolbar-button-active {
+  border-color: var(--border-strong);
+  background: rgba(217, 191, 132, 0.12);
+}
+
+.workspace-panel-stack {
+  display: grid;
+  gap: 16px;
+}
+
 .notification-head {
   display: flex;
   gap: 12px;
@@ -1424,5 +1446,9 @@ textarea {
 
   .detail-grid {
     max-height: none;
+  }
+
+  .workspace-toolbar {
+    padding-top: 8px;
   }
 }

@@ -51,6 +51,7 @@ type SearchResult = {
 };
 
 type RoomVisibility = 'public' | 'private';
+type WorkspacePanel = 'details' | 'pinned' | 'members' | 'invites' | 'profile' | 'admin' | null;
 
 const asRoom = (id: string, data: Record<string, unknown>): Room => ({
   id,
@@ -488,10 +489,8 @@ export function ChatApp() {
   const [activeMessageActionId, setActiveMessageActionId] = useState<string | null>(
     null
   );
-  const [showRoomPanel, setShowRoomPanel] = useState(true);
-  const [showProfilePanel, setShowProfilePanel] = useState(false);
+  const [activeWorkspacePanel, setActiveWorkspacePanel] = useState<WorkspacePanel>(null);
   const [showNotificationsPanel, setShowNotificationsPanel] = useState(false);
-  const [showAdminPanel, setShowAdminPanel] = useState(false);
   const messageListRef = useRef<HTMLDivElement | null>(null);
   const processingInviteIdsRef = useRef<Set<string>>(new Set());
   const seenNotificationIdsRef = useRef<Set<string>>(new Set());
@@ -666,6 +665,10 @@ export function ChatApp() {
       return visibleRooms[0]?.id || null;
     });
   }, [visibleRooms]);
+
+  useEffect(() => {
+    setActiveWorkspacePanel(null);
+  }, [selectedRoomId]);
 
   useEffect(() => {
     if (!selectedRoomId) {
@@ -1786,7 +1789,7 @@ export function ChatApp() {
       );
 
       setSelectedAvatarFile(null);
-      setShowProfilePanel(false);
+      setActiveWorkspacePanel(null);
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : 'Profile update failed');
     } finally {
@@ -2120,6 +2123,12 @@ export function ChatApp() {
     setPendingNotificationMessageId(result.message.id);
   };
 
+  const toggleWorkspacePanel = (
+    panel: Exclude<WorkspacePanel, null>
+  ) => {
+    setActiveWorkspacePanel((current) => (current === panel ? null : panel));
+  };
+
   const handleSignOut = async () => {
     await signOut(auth);
     router.push('/login');
@@ -2171,17 +2180,10 @@ export function ChatApp() {
           <div className='profile-card-actions'>
             <button
               className='button secondary slim'
-              onClick={() => setShowProfilePanel((current) => !current)}
+              onClick={() => toggleWorkspacePanel('profile')}
               type='button'
             >
-              {showProfilePanel ? 'Close profile' : 'Edit profile'}
-            </button>
-            <button
-              className='button secondary slim'
-              onClick={() => setShowRoomPanel((current) => !current)}
-              type='button'
-            >
-              {showRoomPanel ? 'Hide details' : 'Show details'}
+              {activeWorkspacePanel === 'profile' ? 'Close profile' : 'Edit profile'}
             </button>
             <button
               className='button secondary slim'
@@ -2198,10 +2200,10 @@ export function ChatApp() {
             {isWorkspaceAdmin ? (
               <button
                 className='button secondary slim'
-                onClick={() => setShowAdminPanel((current) => !current)}
+                onClick={() => toggleWorkspacePanel('admin')}
                 type='button'
               >
-                {showAdminPanel ? 'Close admin' : 'Admin'}
+                {activeWorkspacePanel === 'admin' ? 'Close admin' : 'Admin'}
               </button>
             ) : null}
           </div>
@@ -2506,20 +2508,81 @@ export function ChatApp() {
           </div>
         ) : null}
 
+        {selectedRoom ? (
+          <div className='workspace-toolbar'>
+            <button
+              className={`button secondary slim workspace-toolbar-button ${
+                activeWorkspacePanel === 'details' ? 'workspace-toolbar-button-active' : ''
+              }`}
+              onClick={() => toggleWorkspacePanel('details')}
+              type='button'
+            >
+              {selectedRoom.kind === 'channel' ? 'Room setup' : 'Contact info'}
+            </button>
+            <button
+              className={`button secondary slim workspace-toolbar-button ${
+                activeWorkspacePanel === 'pinned' ? 'workspace-toolbar-button-active' : ''
+              }`}
+              onClick={() => toggleWorkspacePanel('pinned')}
+              type='button'
+            >
+              Pinned
+            </button>
+            {selectedRoom.kind === 'channel' ? (
+              <button
+                className={`button secondary slim workspace-toolbar-button ${
+                  activeWorkspacePanel === 'members' ? 'workspace-toolbar-button-active' : ''
+                }`}
+                onClick={() => toggleWorkspacePanel('members')}
+                type='button'
+              >
+                Members
+              </button>
+            ) : null}
+            {selectedRoom.kind === 'channel' && canInvitePeople ? (
+              <button
+                className={`button secondary slim workspace-toolbar-button ${
+                  activeWorkspacePanel === 'invites' ? 'workspace-toolbar-button-active' : ''
+                }`}
+                onClick={() => toggleWorkspacePanel('invites')}
+                type='button'
+              >
+                Invites
+              </button>
+            ) : null}
+            <button
+              className={`button secondary slim workspace-toolbar-button ${
+                activeWorkspacePanel === 'profile' ? 'workspace-toolbar-button-active' : ''
+              }`}
+              onClick={() => toggleWorkspacePanel('profile')}
+              type='button'
+            >
+              My profile
+            </button>
+            {isWorkspaceAdmin ? (
+              <button
+                className={`button secondary slim workspace-toolbar-button ${
+                  activeWorkspacePanel === 'admin' ? 'workspace-toolbar-button-active' : ''
+                }`}
+                onClick={() => toggleWorkspacePanel('admin')}
+                type='button'
+              >
+                Admin
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+
         {selectedRoom &&
-        (showRoomPanel ||
-          showProfilePanel ||
-          showAdminPanel ||
-          pinnedMessages.length > 0 ||
-          activeThreadMessage) ? (
-          <div className='detail-grid'>
-            {showRoomPanel ? (
+        (activeWorkspacePanel || activeThreadMessage) ? (
+          <div className='workspace-panel-stack'>
+            {activeWorkspacePanel === 'details' ? (
               <div className='detail-card'>
                 <div className='detail-card-head'>
                   <strong>Room details</strong>
                   <span>
                     {selectedRoom.kind === 'channel'
-                      ? 'Shape the room, roles, and invitations before the conversation gets busy.'
+                      ? 'Update the channel only when needed. The conversation stays front and center.'
                       : 'Quick context for this private conversation.'}
                   </span>
                 </div>
@@ -2574,6 +2637,7 @@ export function ChatApp() {
               </div>
             ) : null}
 
+            {activeWorkspacePanel === 'pinned' ? (
             <div className='detail-card'>
               <div className='detail-card-head'>
                 <strong>Pinned messages</strong>
@@ -2604,8 +2668,9 @@ export function ChatApp() {
                 </div>
               )}
             </div>
+            ) : null}
 
-            {selectedRoom?.kind === 'channel' ? (
+            {selectedRoom?.kind === 'channel' && activeWorkspacePanel === 'members' ? (
               <div className='detail-card'>
                 <div className='detail-card-head'>
                   <strong>Members and roles</strong>
@@ -2647,7 +2712,9 @@ export function ChatApp() {
               </div>
             ) : null}
 
-            {selectedRoom?.kind === 'channel' && canInvitePeople ? (
+            {selectedRoom?.kind === 'channel' &&
+            canInvitePeople &&
+            activeWorkspacePanel === 'invites' ? (
               <div className='detail-card'>
                 <div className='detail-card-head'>
                   <strong>Email invites</strong>
@@ -2699,11 +2766,11 @@ export function ChatApp() {
               </div>
             ) : null}
 
-            {showProfilePanel ? (
+            {activeWorkspacePanel === 'profile' ? (
               <div className='detail-card'>
                 <div className='detail-card-head'>
                   <strong>Your profile</strong>
-                  <span>Set the identity your team sees inside Denuel Chat.</span>
+                  <span>Update your identity without pushing the conversation off screen.</span>
                 </div>
                 <form className='form detail-form' onSubmit={handleSaveProfile}>
                   <input
@@ -2760,11 +2827,11 @@ export function ChatApp() {
               </div>
             ) : null}
 
-            {showAdminPanel ? (
+            {activeWorkspacePanel === 'admin' ? (
               <div className='detail-card'>
                 <div className='detail-card-head'>
                   <strong>Workspace admin</strong>
-                  <span>Manage workspace roles and suspend accounts when needed.</span>
+                  <span>Use admin controls only when you need them, not as the default view.</span>
                 </div>
                 <div className='member-roster'>
                   {people.map((person) => (
