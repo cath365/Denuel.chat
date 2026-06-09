@@ -348,18 +348,57 @@ const getInitials = (value: string) =>
     .map((part) => part[0]?.toUpperCase() || '')
     .join('') || 'D';
 
+const sanitizeFirestoreValue = (value: unknown): unknown => {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value === 'number' && Number.isNaN(value)) {
+    return undefined;
+  }
+
+  if (Array.isArray(value)) {
+    return value
+      .map((entry) => sanitizeFirestoreValue(entry))
+      .filter((entry) => entry !== undefined);
+  }
+
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+
+  if (value.constructor !== Object) {
+    return value;
+  }
+
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).flatMap(([key, entry]) => {
+      if (!key.trim()) {
+        return [];
+      }
+
+      const sanitizedEntry = sanitizeFirestoreValue(entry);
+      return sanitizedEntry === undefined ? [] : [[key, sanitizedEntry]];
+    })
+  );
+};
+
+const sanitizeFirestoreData = <T extends Record<string, unknown>>(data: T) =>
+  sanitizeFirestoreValue(data) as T;
+
 const createMemberShape = (
   room: Room | null,
   userId: string,
   displayName: string,
   role: 'owner' | 'admin' | 'member'
 ) => {
-  const memberIds = Array.from(new Set([...(room?.memberIds || []), userId]));
+  const memberIds = Array.from(
+    new Set([...(room?.memberIds || []), userId].filter((memberId) => memberId.trim()))
+  );
   const memberNamesMap = Object.fromEntries(
-    (room?.memberIds || []).map((memberId, index) => [
-      memberId,
-      room?.memberNames?.[index] || memberId,
-    ])
+    (room?.memberIds || [])
+      .filter((memberId) => memberId.trim())
+      .map((memberId, index) => [memberId, room?.memberNames?.[index] || memberId])
   );
   memberNamesMap[userId] = displayName;
 
@@ -1231,18 +1270,21 @@ export function ChatApp() {
       return;
     }
 
-    await addDoc(collection(db, 'notifications'), {
-      recipientId,
-      actorId,
-      actorName,
-      roomId: roomId || '',
-      roomName: roomName || '',
-      messageId: messageId || '',
-      text,
-      type,
-      isRead: false,
-      createdAt: serverTimestamp(),
-    });
+    await addDoc(
+      collection(db, 'notifications'),
+      sanitizeFirestoreData({
+        recipientId,
+        actorId,
+        actorName,
+        roomId: roomId || '',
+        roomName: roomName || '',
+        messageId: messageId || '',
+        text,
+        type,
+        isRead: false,
+        createdAt: serverTimestamp(),
+      })
+    );
   };
 
   const acceptInvite = async (invite: ChatInvite) => {
@@ -1359,22 +1401,25 @@ export function ChatApp() {
 
     try {
       const selfName = user.displayName || user.email || 'Denuel User';
-      const roomReference = await addDoc(collection(db, 'rooms'), {
-        kind: 'channel',
-        name: roomName.trim(),
-        topic: '',
-        visibility: newChannelVisibility,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-        createdBy: user.uid,
-        createdByName: selfName,
-        memberIds: [user.uid],
-        memberNames: [selfName],
-        memberRoles: { [user.uid]: 'owner' },
-        unreadCounts: { [user.uid]: 0 },
-        lastMessageText: '',
-        lastMessageSenderId: '',
-      });
+      const roomReference = await addDoc(
+        collection(db, 'rooms'),
+        sanitizeFirestoreData({
+          kind: 'channel',
+          name: roomName.trim(),
+          topic: '',
+          visibility: newChannelVisibility || 'public',
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+          createdBy: user.uid,
+          createdByName: selfName,
+          memberIds: [user.uid],
+          memberNames: [selfName],
+          memberRoles: { [user.uid]: 'owner' },
+          unreadCounts: { [user.uid]: 0 },
+          lastMessageText: '',
+          lastMessageSenderId: '',
+        })
+      );
 
       setRoomName('');
       setNewChannelVisibility('public');
@@ -1401,9 +1446,9 @@ export function ChatApp() {
     try {
       await setDoc(
         doc(db, 'rooms', roomId),
-        {
+        sanitizeFirestoreData({
           kind: 'direct',
-          name: targetUser.displayName || targetUser.email,
+          name: targetUser.displayName || targetUser.email || 'Direct message',
           topic: '',
           visibility: 'private',
           createdAt: serverTimestamp(),
@@ -1411,12 +1456,12 @@ export function ChatApp() {
           createdBy: user.uid,
           createdByName: selfName,
           memberIds: [user.uid, targetUser.id],
-          memberNames: [selfName, targetUser.displayName || targetUser.email],
+          memberNames: [selfName, targetUser.displayName || targetUser.email || 'Teammate'],
           memberRoles: { [user.uid]: 'member', [targetUser.id]: 'member' },
           unreadCounts: { [user.uid]: 0, [targetUser.id]: 0 },
           lastMessageText: '',
           lastMessageSenderId: '',
-        },
+        }),
         { merge: true }
       );
 
@@ -1777,14 +1822,14 @@ export function ChatApp() {
 
       await setDoc(
         doc(db, 'users', user.uid),
-        {
+        sanitizeFirestoreData({
           email: user.email || '',
           displayName: nextDisplayName,
           photoURL: nextPhotoURL,
           statusMessage: profileStatus.trim(),
           bio: profileBio.trim(),
           updatedAt: serverTimestamp(),
-        },
+        }),
         { merge: true }
       );
 
@@ -1818,16 +1863,19 @@ export function ChatApp() {
     setError('');
 
     try {
-      const inviteReference = await addDoc(collection(db, 'invites'), {
-        roomId: selectedRoomId,
-        roomName: selectedRoom.name,
-        email: normalizedEmail,
-        role: inviteRole,
-        status: 'pending',
-        invitedById: user.uid,
-        invitedByName: user.displayName || user.email || 'Denuel User',
-        createdAt: serverTimestamp(),
-      });
+      const inviteReference = await addDoc(
+        collection(db, 'invites'),
+        sanitizeFirestoreData({
+          roomId: selectedRoomId,
+          roomName: selectedRoom.name || 'Untitled room',
+          email: normalizedEmail,
+          role: inviteRole,
+          status: 'pending',
+          invitedById: user.uid,
+          invitedByName: user.displayName || user.email || 'Denuel User',
+          createdAt: serverTimestamp(),
+        })
+      );
 
       const inviteUrl = `${env.appUrl}/login?invite=${inviteReference.id}`;
       const existingPerson = people.find(
@@ -1979,14 +2027,17 @@ export function ChatApp() {
 
         const nextMemberShape = createMemberShape(roomForWrite, user.uid, selfName, 'member');
 
-        await updateDoc(doc(db, 'rooms', selectedRoomId), {
-          ...nextMemberShape,
-          unreadCounts: {
-            ...(roomForWrite.unreadCounts || {}),
-            [user.uid]: 0,
-          },
-          updatedAt: serverTimestamp(),
-        });
+        await updateDoc(
+          doc(db, 'rooms', selectedRoomId),
+          sanitizeFirestoreData({
+            ...nextMemberShape,
+            unreadCounts: {
+              ...(roomForWrite.unreadCounts || {}),
+              [user.uid]: 0,
+            },
+            updatedAt: serverTimestamp(),
+          })
+        );
 
         roomForWrite = {
           ...roomForWrite,
@@ -2021,7 +2072,7 @@ export function ChatApp() {
 
       const messageReference = await addDoc(
         collection(db, 'rooms', selectedRoomId, 'messages'),
-        messagePayload
+        sanitizeFirestoreData(messagePayload)
       );
 
       const recipientIds = Array.from(
@@ -2030,28 +2081,33 @@ export function ChatApp() {
             ? roomForWrite.memberIds || [user.uid]
             : roomForWrite?.memberIds || [user.uid]
         )
-      );
-      const nextUnreadCounts = { ...(roomForWrite?.unreadCounts || {}) };
+      ).filter((recipientId) => recipientId.trim());
+      const nextUnreadCounts = sanitizeFirestoreData({
+        ...(roomForWrite?.unreadCounts || {}),
+      }) as Record<string, number>;
 
       recipientIds.forEach((recipientId) => {
         nextUnreadCounts[recipientId] =
           recipientId === user.uid ? 0 : (nextUnreadCounts[recipientId] || 0) + 1;
       });
 
-      await updateDoc(doc(db, 'rooms', selectedRoomId), {
-        lastMessageText:
-          trimmedText ||
-          (attachmentName
-            ? threadParent
-              ? `Reply with ${attachmentName}`
-              : `Sent ${attachmentName}`
-            : threadParent
-              ? `Reply: ${threadParent.text || 'thread update'}`
-              : ''),
-        lastMessageSenderId: user.uid,
-        unreadCounts: nextUnreadCounts,
-        updatedAt: serverTimestamp(),
-      });
+      await updateDoc(
+        doc(db, 'rooms', selectedRoomId),
+        sanitizeFirestoreData({
+          lastMessageText:
+            trimmedText ||
+            (attachmentName
+              ? threadParent
+                ? `Reply with ${attachmentName}`
+                : `Sent ${attachmentName}`
+              : threadParent
+                ? `Reply: ${threadParent.text || 'thread update'}`
+                : ''),
+          lastMessageSenderId: user.uid,
+          unreadCounts: nextUnreadCounts,
+          updatedAt: serverTimestamp(),
+        })
+      );
 
       await setDoc(
         doc(db, 'rooms', selectedRoomId, 'typing', user.uid),
