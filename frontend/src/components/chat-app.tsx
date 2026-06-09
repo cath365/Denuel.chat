@@ -1414,12 +1414,23 @@ export function ChatApp() {
           createdByName: selfName,
           memberIds: [user.uid],
           memberNames: [selfName],
-          memberRoles: { [user.uid]: 'owner' },
-          unreadCounts: { [user.uid]: 0 },
           lastMessageText: '',
           lastMessageSenderId: '',
         })
       );
+
+      try {
+        await updateDoc(
+          doc(db, 'rooms', roomReference.id),
+          sanitizeFirestoreData({
+            memberRoles: { [user.uid]: 'owner' },
+            unreadCounts: { [user.uid]: 0 },
+            updatedAt: serverTimestamp(),
+          })
+        );
+      } catch {
+        // The room itself is the important part; metadata can backfill on next activity.
+      }
 
       setRoomName('');
       setNewChannelVisibility('public');
@@ -1883,47 +1894,59 @@ export function ChatApp() {
       );
 
       if (existingPerson) {
-        await createNotification({
-          recipientId: existingPerson.id,
-          actorId: user.uid,
-          actorName: user.displayName || user.email || 'Denuel User',
-          roomId: selectedRoomId,
-          roomName: selectedRoom.name,
-          text: `${user.displayName || user.email} invited you to ${selectedRoom.name} as ${inviteRole}.`,
-          type: 'invite',
+        try {
+          await createNotification({
+            recipientId: existingPerson.id,
+            actorId: user.uid,
+            actorName: user.displayName || user.email || 'Denuel User',
+            roomId: selectedRoomId,
+            roomName: selectedRoom.name,
+            text: `${user.displayName || user.email} invited you to ${selectedRoom.name} as ${inviteRole}.`,
+            type: 'invite',
+          });
+        } catch {
+          // Email invite should still complete even if the in-app notification fails.
+        }
+      }
+
+      try {
+        const response = await fetch('/api/invite-email', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            email: normalizedEmail,
+            inviteUrl,
+            inviterName: user.displayName || user.email || 'Denuel User',
+            roomName: selectedRoom.name,
+            role: inviteRole,
+          }),
         });
-      }
 
-      const response = await fetch('/api/invite-email', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: normalizedEmail,
-          inviteUrl,
-          inviterName: user.displayName || user.email || 'Denuel User',
-          roomName: selectedRoom.name,
-          role: inviteRole,
-        }),
-      });
+        const result = (await response.json()) as {
+          sent?: boolean;
+          mode?: string;
+          error?: string;
+        };
 
-      const result = (await response.json()) as { sent?: boolean; mode?: string; error?: string };
+        if (!response.ok) {
+          throw new Error(result.error || 'Invite send failed.');
+        }
 
-      if (!response.ok) {
-        throw new Error(result.error || 'Invite send failed.');
-      }
+        if (!result.sent) {
+          const mailtoLink = `mailto:${encodeURIComponent(
+            normalizedEmail
+          )}?subject=${encodeURIComponent(
+            `You're invited to ${selectedRoom.name} on Denuel Chat`
+          )}&body=${encodeURIComponent(
+            `Hello,\n\n${user.displayName || user.email} invited you to join ${selectedRoom.name} on Denuel Chat as ${inviteRole}.\n\nOpen Denuel Chat here: ${inviteUrl}\n\nIf you already have an account, signing in with this email will automatically add you to the room.`
+          )}`;
 
-      if (!result.sent) {
-        const mailtoLink = `mailto:${encodeURIComponent(
-          normalizedEmail
-        )}?subject=${encodeURIComponent(
-          `You're invited to ${selectedRoom.name} on Denuel Chat`
-        )}&body=${encodeURIComponent(
-          `Hello,\n\n${user.displayName || user.email} invited you to join ${selectedRoom.name} on Denuel Chat as ${inviteRole}.\n\nOpen Denuel Chat here: ${inviteUrl}\n\nIf you already have an account, signing in with this email will automatically add you to the room.`
-        )}`;
-
-        window.open(mailtoLink, '_blank');
+          window.open(mailtoLink, '_blank');
+        }
+      } catch {
+        // The invite document is already created, so fallback gracefully.
       }
 
       setInviteEmail('');
@@ -2091,33 +2114,41 @@ export function ChatApp() {
           recipientId === user.uid ? 0 : (nextUnreadCounts[recipientId] || 0) + 1;
       });
 
-      await updateDoc(
-        doc(db, 'rooms', selectedRoomId),
-        sanitizeFirestoreData({
-          lastMessageText:
-            trimmedText ||
-            (attachmentName
-              ? threadParent
-                ? `Reply with ${attachmentName}`
-                : `Sent ${attachmentName}`
-              : threadParent
-                ? `Reply: ${threadParent.text || 'thread update'}`
-                : ''),
-          lastMessageSenderId: user.uid,
-          unreadCounts: nextUnreadCounts,
-          updatedAt: serverTimestamp(),
-        })
-      );
+      try {
+        await updateDoc(
+          doc(db, 'rooms', selectedRoomId),
+          sanitizeFirestoreData({
+            lastMessageText:
+              trimmedText ||
+              (attachmentName
+                ? threadParent
+                  ? `Reply with ${attachmentName}`
+                  : `Sent ${attachmentName}`
+                : threadParent
+                  ? `Reply: ${threadParent.text || 'thread update'}`
+                  : ''),
+            lastMessageSenderId: user.uid,
+            unreadCounts: nextUnreadCounts,
+            updatedAt: serverTimestamp(),
+          })
+        );
+      } catch {
+        // Keep the message even if room metadata cannot be refreshed right now.
+      }
 
-      await setDoc(
-        doc(db, 'rooms', selectedRoomId, 'typing', user.uid),
-        {
-          displayName: selfName,
-          isTyping: false,
-          updatedAt: serverTimestamp(),
-        },
-        { merge: true }
-      );
+      try {
+        await setDoc(
+          doc(db, 'rooms', selectedRoomId, 'typing', user.uid),
+          {
+            displayName: selfName,
+            isTyping: false,
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
+      } catch {
+        // Typing cleanup should never block the actual message send.
+      }
 
       if (threadParent && selectedRoom) {
         const replyRecipients = new Set<string>();
@@ -2133,16 +2164,20 @@ export function ChatApp() {
         });
 
         for (const recipientId of Array.from(replyRecipients)) {
-          await createNotification({
-            recipientId,
-            actorId: user.uid,
-            actorName: selfName,
-            roomId: selectedRoomId,
-            roomName: getRoomLabel(selectedRoom),
-            messageId: messageReference.id,
-            text: `${selfName} replied in ${getRoomLabel(selectedRoom)}.`,
-            type: 'reply',
-          });
+          try {
+            await createNotification({
+              recipientId,
+              actorId: user.uid,
+              actorName: selfName,
+              roomId: selectedRoomId,
+              roomName: getRoomLabel(selectedRoom),
+              messageId: messageReference.id,
+              text: `${selfName} replied in ${getRoomLabel(selectedRoom)}.`,
+              type: 'reply',
+            });
+          } catch {
+            // Replies should still send even if notification fan-out fails.
+          }
         }
       }
 
