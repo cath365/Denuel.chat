@@ -100,6 +100,7 @@ textarea {
 }
 
 .chat-page .shell {
+  width: min(1480px, calc(100vw - 24px));
   height: calc(100vh - 32px);
   display: flex;
 }
@@ -474,7 +475,7 @@ textarea {
 .chat-layout {
   display: grid;
   gap: 24px;
-  grid-template-columns: minmax(300px, 360px) minmax(0, 1fr);
+  grid-template-columns: minmax(290px, 332px) minmax(0, 1.32fr);
   width: 100%;
   min-height: 0;
 }
@@ -710,13 +711,22 @@ textarea {
 .chat-main {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 22px;
   overflow: hidden;
+  position: relative;
+  border-radius: 38px;
+  background:
+    radial-gradient(circle at top center, rgba(255, 248, 231, 0.06), transparent 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(7, 7, 7, 0.14)),
+    rgba(18, 16, 13, 0.86);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 248, 231, 0.06),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.02);
 }
 
 .chat-main-top {
   display: flex;
-  gap: 18px;
+  gap: 22px;
   align-items: flex-start;
   justify-content: space-between;
   flex-wrap: wrap;
@@ -747,7 +757,7 @@ textarea {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
-  padding: 14px 0 4px;
+  padding: 6px 0 0;
 }
 
 .workspace-toolbar-button {
@@ -997,14 +1007,23 @@ textarea {
   flex: 1 1 auto;
   min-height: 220px;
   max-height: none;
-  padding: 10px 8px 10px 0;
+  padding: 22px 18px 18px;
   align-content: start;
+  border-radius: 34px;
+  border: 1px solid rgba(217, 191, 132, 0.1);
+  background:
+    radial-gradient(circle at top, rgba(255, 248, 231, 0.04), transparent 36%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0.01)),
+    rgba(8, 8, 8, 0.18);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 248, 231, 0.05),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.02);
   mask-image: linear-gradient(180deg, transparent 0, #000 24px, #000 calc(100% - 24px), transparent 100%);
 }
 
 .message-stack {
   display: grid;
-  gap: 12px;
+  gap: 16px;
 }
 
 .message-day-separator {
@@ -1024,21 +1043,24 @@ textarea {
 .message-card {
   border: 1px solid var(--border);
   background:
-    linear-gradient(180deg, rgba(255, 248, 231, 0.04), rgba(255, 255, 255, 0.015)),
-    rgba(255, 255, 255, 0.03);
-  border-radius: 24px 24px 24px 12px;
-  padding: 16px 18px;
-  max-width: min(720px, 100%);
-  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.16);
+    linear-gradient(180deg, rgba(255, 248, 231, 0.08), rgba(255, 255, 255, 0.02)),
+    rgba(255, 255, 255, 0.035);
+  border-radius: 30px 30px 30px 16px;
+  padding: 18px 20px;
+  max-width: min(860px, 94%);
+  box-shadow:
+    0 18px 40px rgba(0, 0, 0, 0.18),
+    inset 0 1px 0 rgba(255, 248, 231, 0.05);
   transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
 }
 
 .message-card-own {
   justify-self: end;
   background:
-    linear-gradient(180deg, rgba(217, 191, 132, 0.12), rgba(217, 191, 132, 0.06)),
-    rgba(217, 191, 132, 0.09);
-  border-radius: 24px 24px 12px 24px;
+    linear-gradient(180deg, rgba(217, 191, 132, 0.22), rgba(217, 191, 132, 0.08)),
+    rgba(217, 191, 132, 0.1);
+  border-radius: 30px 30px 16px 30px;
+  max-width: min(760px, 86%);
 }
 
 .message-card:hover {
@@ -1049,7 +1071,7 @@ textarea {
 
 .message-frame {
   display: flex;
-  gap: 14px;
+  gap: 16px;
   align-items: flex-start;
 }
 
@@ -1059,7 +1081,8 @@ textarea {
 
 .message-content {
   display: grid;
-  gap: 10px;
+  gap: 12px;
+  width: 100%;
 }
 
 .message-meta {
@@ -1085,9 +1108,9 @@ textarea {
 }
 
 .message-body {
-  line-height: 1.68;
+  line-height: 1.76;
   white-space: pre-wrap;
-  font-size: 0.99rem;
+  font-size: 1.02rem;
 }
 
 .message-body-deleted {
@@ -1120,8 +1143,8 @@ textarea {
 
 .message-footer {
   display: grid;
-  gap: 10px;
-  padding-top: 2px;
+  gap: 12px;
+  padding-top: 4px;
 }
 
 .reaction-chip,
@@ -1298,14 +1321,18 @@ textarea {
 
 .chat-compose {
   display: grid;
-  gap: 12px;
-  padding: 16px;
-  border-radius: 24px;
+  gap: 14px;
+  padding: 20px 22px 18px;
+  border-radius: 34px;
   border: 1px solid var(--border);
   background:
-    linear-gradient(180deg, rgba(255, 248, 231, 0.03), rgba(255, 255, 255, 0.015)),
-    rgba(255, 255, 255, 0.025);
-  backdrop-filter: blur(18px);
+    radial-gradient(circle at top, rgba(255, 248, 231, 0.06), transparent 38%),
+    linear-gradient(180deg, rgba(255, 248, 231, 0.04), rgba(255, 255, 255, 0.015)),
+    rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(22px);
+  box-shadow:
+    0 16px 36px rgba(0, 0, 0, 0.18),
+    inset 0 1px 0 rgba(255, 248, 231, 0.06);
 }
 
 .composer-toolbar {
@@ -1321,10 +1348,12 @@ textarea {
 }
 
 .composer-textarea {
-  min-height: 120px;
+  min-height: 144px;
   resize: vertical;
-  line-height: 1.65;
-  border-radius: 20px;
+  line-height: 1.75;
+  border-radius: 28px;
+  padding: 18px 20px;
+  font-size: 1.02rem;
 }
 
 .compose-actions {
