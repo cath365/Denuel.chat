@@ -372,6 +372,30 @@ const createMemberShape = (
   };
 };
 
+const getRoomRoleForUser = (room: Room | null, userId?: string | null) => {
+  if (!room || !userId) {
+    return '';
+  }
+
+  if (room.kind === 'direct') {
+    return 'member';
+  }
+
+  if (room.memberRoles?.[userId]) {
+    return room.memberRoles[userId];
+  }
+
+  if (room.createdBy === userId) {
+    return 'owner';
+  }
+
+  if ((room.memberIds || []).includes(userId)) {
+    return 'member';
+  }
+
+  return '';
+};
+
 function AvatarBadge({
   displayName,
   photoURL,
@@ -1027,11 +1051,7 @@ export function ChatApp() {
       return '';
     }
 
-    if (selectedRoom.kind === 'direct') {
-      return 'member';
-    }
-
-    return selectedRoom.memberRoles?.[user.uid] || '';
+    return getRoomRoleForUser(selectedRoom, user.uid);
   }, [selectedRoom, user]);
 
   const canManageRoom = Boolean(
@@ -1052,8 +1072,6 @@ export function ChatApp() {
       return [];
     }
 
-    const roleMap = selectedRoom.memberRoles || {};
-
     return (selectedRoom.memberIds || []).map((memberId, index) => {
       const person = people.find((candidate) => candidate.id === memberId);
 
@@ -1064,9 +1082,7 @@ export function ChatApp() {
         email: person?.email || '',
         photoURL: person?.photoURL || '',
         presenceStatus: person?.presenceStatus || 'offline',
-        role:
-          roleMap[memberId] ||
-          (memberId === selectedRoom.createdBy ? 'owner' : 'member'),
+        role: getRoomRoleForUser(selectedRoom, memberId) || 'member',
       };
     });
   }, [people, selectedRoom]);
@@ -1780,7 +1796,6 @@ export function ChatApp() {
         invitedById: user.uid,
         invitedByName: user.displayName || user.email || 'Denuel User',
         createdAt: serverTimestamp(),
-        acceptedAt: null,
       });
 
       const inviteUrl = `${env.appUrl}/login?invite=${inviteReference.id}`;
@@ -1952,27 +1967,31 @@ export function ChatApp() {
         };
       }
 
-      const messageReference = await addDoc(collection(db, 'rooms', selectedRoomId, 'messages'), {
+      const messagePayload: Record<string, unknown> = {
         text: trimmedText,
         senderId: user.uid,
         senderName: selfName,
         createdAt: serverTimestamp(),
-        attachmentName,
-        attachmentSize,
-        attachmentType,
-        attachmentUrl,
-        deletedAt: null,
-        editedAt: null,
-        isDeleted: false,
-        isPinned: false,
-        pinnedAt: null,
-        pinnedById: '',
-        pinnedByName: '',
-        parentMessageId: threadParent?.id || '',
-        parentMessagePreview: threadParent?.text || threadParent?.attachmentName || '',
-        parentMessageSenderName: threadParent?.senderName || '',
-        reactions: {},
-      });
+      };
+
+      if (attachmentName) {
+        messagePayload.attachmentName = attachmentName;
+        messagePayload.attachmentSize = attachmentSize;
+        messagePayload.attachmentType = attachmentType;
+        messagePayload.attachmentUrl = attachmentUrl;
+      }
+
+      if (threadParent) {
+        messagePayload.parentMessageId = threadParent.id;
+        messagePayload.parentMessagePreview =
+          threadParent.text || threadParent.attachmentName || '';
+        messagePayload.parentMessageSenderName = threadParent.senderName || '';
+      }
+
+      const messageReference = await addDoc(
+        collection(db, 'rooms', selectedRoomId, 'messages'),
+        messagePayload
+      );
 
       const recipientIds = Array.from(
         new Set(
@@ -3068,6 +3087,8 @@ export function ChatApp() {
           </div>
         ) : null}
 
+        {error ? <div className='auth-error'>{error}</div> : null}
+
         <form className='chat-compose-wrap' onSubmit={handleSendMessage}>
           <div className='chat-compose'>
             <div className='composer-toolbar'>
@@ -3132,7 +3153,6 @@ export function ChatApp() {
           <div className='read-receipts'>Seen by {seenByNames.join(', ')}</div>
         ) : null}
 
-        {error ? <div className='auth-error'>{error}</div> : null}
       </section>
     </div>
   );
