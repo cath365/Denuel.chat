@@ -488,9 +488,10 @@ export function ChatApp() {
 
     let publicRooms: Room[] = [];
     let memberRooms: Room[] = [];
+    let ownedRooms: Room[] = [];
 
     const syncRooms = () => {
-      const merged = [...publicRooms, ...memberRooms];
+      const merged = [...publicRooms, ...memberRooms, ...ownedRooms];
       const uniqueRooms = Array.from(
         new Map(merged.map((room) => [room.id, room])).values()
       ).sort(
@@ -509,6 +510,11 @@ export function ChatApp() {
     const memberRoomsQuery = query(
       collection(db, 'rooms'),
       where('memberIds', 'array-contains', user.uid),
+      limit(80)
+    );
+    const ownedRoomsQuery = query(
+      collection(db, 'rooms'),
+      where('createdBy', '==', user.uid),
       limit(80)
     );
 
@@ -534,9 +540,21 @@ export function ChatApp() {
       }
     );
 
+    const unsubscribeOwned = onSnapshot(
+      ownedRoomsQuery,
+      (snapshot) => {
+        ownedRooms = snapshot.docs.map((roomDoc) => asRoom(roomDoc.id, roomDoc.data()));
+        syncRooms();
+      },
+      (caughtError) => {
+        setError(caughtError.message);
+      }
+    );
+
     return () => {
       unsubscribePublic();
       unsubscribeMember();
+      unsubscribeOwned();
     };
   }, [user]);
 
