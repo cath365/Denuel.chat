@@ -29,7 +29,7 @@ export default function HomePage() {
             <Link className='button' href='/login'>
               Open Denuel Chat
             </Link>
-            <Link className='button secondary' href='/chat'>
+            <Link className='button secondary' href='#workspace-preview'>
               Explore workspace
             </Link>
           </div>
@@ -50,7 +50,7 @@ export default function HomePage() {
           </div>
         </section>
 
-        <section className='card panel showcase-shell'>
+        <section className='card panel showcase-shell' id='workspace-preview'>
           <div className='showcase-topline'>
             <span className='eyebrow'>Workspace preview</span>
             <span className='showcase-domain'>{env.appUrl}</span>
