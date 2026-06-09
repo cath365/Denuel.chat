@@ -2,7 +2,6 @@
 
 import { signOut, updateProfile } from 'firebase/auth';
 import {
-  addDoc,
   collection,
   collectionGroup,
   doc,
@@ -465,6 +464,29 @@ const getAuthorizedHeaders = async (user: { getIdToken: () => Promise<string> })
   'Content-Type': 'application/json',
 });
 
+const getFirestoreRestErrorMessage = async (
+  response: Response,
+  fallback: string
+) => {
+  const raw = await response.text();
+
+  if (!raw) {
+    return fallback;
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as {
+      error?: {
+        message?: string;
+      };
+    };
+
+    return parsed.error?.message || fallback;
+  } catch {
+    return raw;
+  }
+};
+
 const createDocumentViaRest = async (
   user: { getIdToken: () => Promise<string> },
   collectionPath: string,
@@ -480,7 +502,9 @@ const createDocumentViaRest = async (
   );
 
   if (!response.ok) {
-    throw new Error('Firestore create failed.');
+    throw new Error(
+      await getFirestoreRestErrorMessage(response, 'Firestore create failed.')
+    );
   }
 
   const result = (await response.json()) as { name?: string };
@@ -509,7 +533,9 @@ const updateDocumentViaRest = async (
   );
 
   if (!response.ok) {
-    throw new Error('Firestore update failed.');
+    throw new Error(
+      await getFirestoreRestErrorMessage(response, 'Firestore update failed.')
+    );
   }
 };
 
@@ -1394,24 +1420,29 @@ export function ChatApp() {
     text: string;
     type: 'invite' | 'reply' | 'announcement';
   }) => {
-    if (!recipientId || recipientId === actorId) {
+    if (!user || !recipientId || recipientId === actorId) {
       return;
     }
 
-    await addDoc(
-      collection(db, 'notifications'),
-      sanitizeFirestoreData({
-        recipientId,
-        actorId,
-        actorName,
-        roomId: roomId || '',
-        roomName: roomName || '',
-        messageId: messageId || '',
-        text,
-        type,
-        isRead: false,
-        createdAt: serverTimestamp(),
-      })
+    await withTimeout(
+      createDocumentViaRest(
+        user,
+        'notifications',
+        sanitizeFirestoreData({
+          recipientId,
+          actorId,
+          actorName,
+          roomId: roomId || '',
+          roomName: roomName || '',
+          messageId: messageId || '',
+          text,
+          type,
+          isRead: false,
+          createdAt: new Date(),
+        })
+      ),
+      8000,
+      'Notification delivery timed out.'
     );
   };
 
@@ -1577,15 +1608,17 @@ export function ChatApp() {
     const roomId = createDirectRoomId(user.uid, targetUser.id);
 
     try {
-      await setDoc(
-        doc(db, 'rooms', roomId),
-        sanitizeFirestoreData({
+      await withTimeout(
+        updateDocumentViaRest(
+          user,
+          `rooms/${roomId}`,
+          sanitizeFirestoreData({
           kind: 'direct',
           name: targetUser.displayName || targetUser.email || 'Direct message',
           topic: '',
           visibility: 'private',
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
+          createdAt: new Date(),
+          updatedAt: new Date(),
           createdBy: user.uid,
           createdByName: selfName,
           memberIds: [user.uid, targetUser.id],
@@ -1594,8 +1627,10 @@ export function ChatApp() {
           unreadCounts: { [user.uid]: 0, [targetUser.id]: 0 },
           lastMessageText: '',
           lastMessageSenderId: '',
-        }),
-        { merge: true }
+          })
+        ),
+        12000,
+        'Direct message setup timed out. Please try again.'
       );
 
       setSelectedRoomId(roomId);
@@ -1630,14 +1665,18 @@ export function ChatApp() {
         'member'
       );
 
-      await updateDoc(doc(db, 'rooms', selectedRoomId), {
-        ...nextMemberShape,
-        unreadCounts: {
-          ...(selectedRoom.unreadCounts || {}),
-          [user.uid]: 0,
-        },
-        updatedAt: serverTimestamp(),
-      });
+      await withTimeout(
+        updateDocumentViaRest(user, `rooms/${selectedRoomId}`, {
+          ...nextMemberShape,
+          unreadCounts: {
+            ...(selectedRoom.unreadCounts || {}),
+            [user.uid]: 0,
+          },
+          updatedAt: new Date(),
+        }),
+        12000,
+        'Joining the channel timed out. Please try again.'
+      );
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : 'Join channel failed');
     } finally {
@@ -1654,9 +1693,13 @@ export function ChatApp() {
     }
 
     try {
-      await updateDoc(doc(db, 'users', targetUser.id), {
-        workspaceRole: role,
-      });
+      await withTimeout(
+        updateDocumentViaRest(user!, `users/${targetUser.id}`, {
+          workspaceRole: role,
+        }),
+        12000,
+        'Workspace role update timed out. Please try again.'
+      );
     } catch (caughtError) {
       setError(
         caughtError instanceof Error
@@ -1675,9 +1718,13 @@ export function ChatApp() {
     }
 
     try {
-      await updateDoc(doc(db, 'users', targetUser.id), {
-        accountStatus,
-      });
+      await withTimeout(
+        updateDocumentViaRest(user!, `users/${targetUser.id}`, {
+          accountStatus,
+        }),
+        12000,
+        'Account moderation timed out. Please try again.'
+      );
     } catch (caughtError) {
       setError(
         caughtError instanceof Error
@@ -1704,13 +1751,17 @@ export function ChatApp() {
     setError('');
 
     try {
-      await updateDoc(doc(db, 'rooms', selectedRoomId), {
-        memberRoles: {
-          ...(selectedRoom.memberRoles || {}),
-          [memberId]: role,
-        },
-        updatedAt: serverTimestamp(),
-      });
+      await withTimeout(
+        updateDocumentViaRest(user!, `rooms/${selectedRoomId}`, {
+          memberRoles: {
+            ...(selectedRoom.memberRoles || {}),
+            [memberId]: role,
+          },
+          updatedAt: new Date(),
+        }),
+        12000,
+        'Role update timed out. Please try again.'
+      );
 
       await createNotification({
         recipientId: memberId,
@@ -1957,17 +2008,21 @@ export function ChatApp() {
         photoURL: nextPhotoURL || null,
       });
 
-      await setDoc(
-        doc(db, 'users', user.uid),
-        sanitizeFirestoreData({
+      await withTimeout(
+        updateDocumentViaRest(
+          user,
+          `users/${user.uid}`,
+          sanitizeFirestoreData({
           email: user.email || '',
           displayName: nextDisplayName,
           photoURL: nextPhotoURL,
           statusMessage: profileStatus.trim(),
           bio: profileBio.trim(),
-          updatedAt: serverTimestamp(),
-        }),
-        { merge: true }
+            updatedAt: new Date(),
+          })
+        ),
+        12000,
+        'Profile update timed out. Please try again.'
       );
 
       setSelectedAvatarFile(null);
@@ -2001,8 +2056,9 @@ export function ChatApp() {
 
     try {
       const inviteReference = await withTimeout(
-        addDoc(
-          collection(db, 'invites'),
+        createDocumentViaRest(
+          user,
+          'invites',
           sanitizeFirestoreData({
             roomId: selectedRoomId,
             roomName: selectedRoom.name || 'Untitled room',
@@ -2011,7 +2067,7 @@ export function ChatApp() {
             status: 'pending',
             invitedById: user.uid,
             invitedByName: user.displayName || user.email || 'Denuel User',
-            createdAt: serverTimestamp(),
+            createdAt: new Date(),
           })
         ),
         12000,
@@ -2092,9 +2148,13 @@ export function ChatApp() {
     setError('');
 
     try {
-      await updateDoc(doc(db, 'invites', inviteId), {
-        status: 'revoked',
-      });
+      await withTimeout(
+        updateDocumentViaRest(user!, `invites/${inviteId}`, {
+          status: 'revoked',
+        }),
+        12000,
+        'Invite revoke timed out. Please try again.'
+      );
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : 'Invite revoke failed');
     }
@@ -2104,7 +2164,9 @@ export function ChatApp() {
     setShowNotificationsPanel(true);
 
     try {
-      await updateDoc(doc(db, 'notifications', notification.id), { isRead: true });
+      await updateDocumentViaRest(user!, `notifications/${notification.id}`, {
+        isRead: true,
+      });
     } catch {
       // keep UX moving even if the notification read mark fails
     }
@@ -2123,7 +2185,9 @@ export function ChatApp() {
 
     for (const notification of unreadItems) {
       try {
-        await updateDoc(doc(db, 'notifications', notification.id), { isRead: true });
+        await updateDocumentViaRest(user!, `notifications/${notification.id}`, {
+          isRead: true,
+        });
       } catch {
         // keep moving
       }
