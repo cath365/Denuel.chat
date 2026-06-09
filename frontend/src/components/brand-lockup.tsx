@@ -25,7 +25,6 @@ export function BrandLockup({
         alt={`${env.appName} logo`}
         className='brand-lockup-image'
         height={imageSize}
-        priority
         src='/branding/logo-primary.jpg'
         width={imageSize}
       />
