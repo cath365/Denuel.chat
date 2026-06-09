@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Cormorant_Garamond, Source_Sans_3 } from 'next/font/google';
 
+import { AppBootShell } from '../components/app-boot-shell';
 import { FirebaseProvider } from '../components/firebase-provider';
 import { env } from '../lib/env';
 import './globals.css';
@@ -34,7 +35,9 @@ export default function RootLayout({
   return (
     <html lang='en'>
       <body className={`${heading.variable} ${body.variable}`}>
-        <FirebaseProvider>{children}</FirebaseProvider>
+        <AppBootShell>
+          <FirebaseProvider>{children}</FirebaseProvider>
+        </AppBootShell>
       </body>
     </html>
   );
