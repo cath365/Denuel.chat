@@ -386,6 +386,28 @@ const sanitizeFirestoreValue = (value: unknown): unknown => {
 const sanitizeFirestoreData = <T extends Record<string, unknown>>(data: T) =>
   sanitizeFirestoreValue(data) as T;
 
+const withTimeout = async <T,>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  message: string
+) => {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+  const timeoutPromise = new Promise<T>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error(message));
+    }, timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  }
+};
+
 const createMemberShape = (
   room: Room | null,
   userId: string,
@@ -1401,40 +1423,43 @@ export function ChatApp() {
 
     try {
       const selfName = user.displayName || user.email || 'Denuel User';
-      const roomReference = await addDoc(
-        collection(db, 'rooms'),
-        sanitizeFirestoreData({
-          kind: 'channel',
-          name: roomName.trim(),
-          topic: '',
-          visibility: newChannelVisibility || 'public',
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-          createdBy: user.uid,
-          createdByName: selfName,
-          memberIds: [user.uid],
-          memberNames: [selfName],
-          lastMessageText: '',
-          lastMessageSenderId: '',
-        })
-      );
-
-      try {
-        await updateDoc(
-          doc(db, 'rooms', roomReference.id),
+      const roomReference = await withTimeout(
+        addDoc(
+          collection(db, 'rooms'),
           sanitizeFirestoreData({
-            memberRoles: { [user.uid]: 'owner' },
-            unreadCounts: { [user.uid]: 0 },
+            kind: 'channel',
+            name: roomName.trim(),
+            topic: '',
+            visibility: newChannelVisibility || 'public',
+            createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
+            createdBy: user.uid,
+            createdByName: selfName,
+            memberIds: [user.uid],
+            memberNames: [selfName],
+            lastMessageText: '',
+            lastMessageSenderId: '',
           })
-        );
-      } catch {
-        // The room itself is the important part; metadata can backfill on next activity.
-      }
+        ),
+        12000,
+        'Channel creation timed out. Please try again.'
+      );
 
       setRoomName('');
       setNewChannelVisibility('public');
       setSelectedRoomId(roomReference.id);
+      setIsCreatingRoom(false);
+
+      void updateDoc(
+        doc(db, 'rooms', roomReference.id),
+        sanitizeFirestoreData({
+          memberRoles: { [user.uid]: 'owner' },
+          unreadCounts: { [user.uid]: 0 },
+          updatedAt: serverTimestamp(),
+        })
+      ).catch(() => {
+        // The room itself is the important part; metadata can backfill on next activity.
+      });
     } catch (caughtError) {
       setError(
         caughtError instanceof Error ? caughtError.message : 'Room creation failed'
@@ -1792,12 +1817,16 @@ export function ChatApp() {
     setError('');
 
     try {
-      await updateDoc(doc(db, 'rooms', selectedRoomId), {
-        name: nextName,
-        topic: roomTopicDraft.trim(),
-        visibility: channelVisibilityDraft,
-        updatedAt: serverTimestamp(),
-      });
+      await withTimeout(
+        updateDoc(doc(db, 'rooms', selectedRoomId), {
+          name: nextName,
+          topic: roomTopicDraft.trim(),
+          visibility: channelVisibilityDraft,
+          updatedAt: serverTimestamp(),
+        }),
+        12000,
+        'Saving room details timed out. Please try again.'
+      );
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : 'Room update failed');
     } finally {
@@ -1874,18 +1903,22 @@ export function ChatApp() {
     setError('');
 
     try {
-      const inviteReference = await addDoc(
-        collection(db, 'invites'),
-        sanitizeFirestoreData({
-          roomId: selectedRoomId,
-          roomName: selectedRoom.name || 'Untitled room',
-          email: normalizedEmail,
-          role: inviteRole,
-          status: 'pending',
-          invitedById: user.uid,
-          invitedByName: user.displayName || user.email || 'Denuel User',
-          createdAt: serverTimestamp(),
-        })
+      const inviteReference = await withTimeout(
+        addDoc(
+          collection(db, 'invites'),
+          sanitizeFirestoreData({
+            roomId: selectedRoomId,
+            roomName: selectedRoom.name || 'Untitled room',
+            email: normalizedEmail,
+            role: inviteRole,
+            status: 'pending',
+            invitedById: user.uid,
+            invitedByName: user.displayName || user.email || 'Denuel User',
+            createdAt: serverTimestamp(),
+          })
+        ),
+        12000,
+        'Invite creation timed out. Please try again.'
       );
 
       const inviteUrl = `${env.appUrl}/login?invite=${inviteReference.id}`;
@@ -2093,9 +2126,13 @@ export function ChatApp() {
         messagePayload.parentMessageSenderName = threadParent.senderName || '';
       }
 
-      const messageReference = await addDoc(
-        collection(db, 'rooms', selectedRoomId, 'messages'),
-        sanitizeFirestoreData(messagePayload)
+      const messageReference = await withTimeout(
+        addDoc(
+          collection(db, 'rooms', selectedRoomId, 'messages'),
+          sanitizeFirestoreData(messagePayload)
+        ),
+        12000,
+        'Message send timed out. Please try again.'
       );
 
       const recipientIds = Array.from(
