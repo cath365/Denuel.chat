@@ -408,6 +408,111 @@ const withTimeout = async <T,>(
   }
 };
 
+const FIRESTORE_REST_BASE = (projectId: string) =>
+  `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents`;
+
+const toFirestoreRestValue = (value: unknown): Record<string, unknown> => {
+  if (value === null) {
+    return { nullValue: null };
+  }
+
+  if (typeof value === 'string') {
+    return { stringValue: value };
+  }
+
+  if (typeof value === 'boolean') {
+    return { booleanValue: value };
+  }
+
+  if (typeof value === 'number') {
+    return Number.isInteger(value)
+      ? { integerValue: String(value) }
+      : { doubleValue: value };
+  }
+
+  if (value instanceof Date) {
+    return { timestampValue: value.toISOString() };
+  }
+
+  if (Array.isArray(value)) {
+    return {
+      arrayValue: {
+        values: value.map((entry) => toFirestoreRestValue(entry)),
+      },
+    };
+  }
+
+  return {
+    mapValue: {
+      fields: Object.fromEntries(
+        Object.entries(value as Record<string, unknown>)
+          .filter(([, entry]) => entry !== undefined)
+          .map(([key, entry]) => [key, toFirestoreRestValue(entry)])
+      ),
+    },
+  };
+};
+
+const toFirestoreRestFields = (data: Record<string, unknown>) =>
+  Object.fromEntries(
+    Object.entries(data)
+      .filter(([, value]) => value !== undefined)
+      .map(([key, value]) => [key, toFirestoreRestValue(value)])
+  );
+
+const getAuthorizedHeaders = async (user: { getIdToken: () => Promise<string> }) => ({
+  Authorization: `Bearer ${await user.getIdToken()}`,
+  'Content-Type': 'application/json',
+});
+
+const createDocumentViaRest = async (
+  user: { getIdToken: () => Promise<string> },
+  collectionPath: string,
+  data: Record<string, unknown>
+) => {
+  const response = await fetch(
+    `${FIRESTORE_REST_BASE(env.firebaseProjectId)}/${collectionPath}`,
+    {
+      method: 'POST',
+      headers: await getAuthorizedHeaders(user),
+      body: JSON.stringify({ fields: toFirestoreRestFields(data) }),
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error('Firestore create failed.');
+  }
+
+  const result = (await response.json()) as { name?: string };
+  return {
+    id: result.name?.split('/').pop() || '',
+  };
+};
+
+const updateDocumentViaRest = async (
+  user: { getIdToken: () => Promise<string> },
+  documentPath: string,
+  data: Record<string, unknown>
+) => {
+  const fieldPaths = Object.keys(data);
+  const query = fieldPaths
+    .map((fieldPath) => `updateMask.fieldPaths=${encodeURIComponent(fieldPath)}`)
+    .join('&');
+  const separator = query ? `?${query}` : '';
+  const response = await fetch(
+    `${FIRESTORE_REST_BASE(env.firebaseProjectId)}/${documentPath}${separator}`,
+    {
+      method: 'PATCH',
+      headers: await getAuthorizedHeaders(user),
+      body: JSON.stringify({ fields: toFirestoreRestFields(data) }),
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error('Firestore update failed.');
+  }
+};
+
 const createMemberShape = (
   room: Room | null,
   userId: string,
@@ -1425,42 +1530,33 @@ export function ChatApp() {
     try {
       const selfName = user.displayName || user.email || 'Denuel User';
       const roomReference = await withTimeout(
-        addDoc(
-          collection(db, 'rooms'),
-          sanitizeFirestoreData({
-            kind: 'channel',
-            name: roomName.trim(),
-            topic: '',
-            visibility: newChannelVisibility || 'public',
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-            createdBy: user.uid,
-            createdByName: selfName,
-            memberIds: [user.uid],
-            memberNames: [selfName],
-            lastMessageText: '',
-            lastMessageSenderId: '',
-          })
-        ),
+        createDocumentViaRest(user, 'rooms', {
+          kind: 'channel',
+          name: roomName.trim(),
+          topic: '',
+          visibility: newChannelVisibility || 'public',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          createdBy: user.uid,
+          createdByName: selfName,
+          memberIds: [user.uid],
+          memberNames: [selfName],
+          memberRoles: { [user.uid]: 'owner' },
+          unreadCounts: { [user.uid]: 0 },
+          lastMessageText: '',
+          lastMessageSenderId: '',
+        }),
         12000,
         'Channel creation timed out. Please try again.'
       );
 
+      if (!roomReference.id) {
+        throw new Error('Room creation failed');
+      }
+
       setRoomName('');
       setNewChannelVisibility('public');
       setSelectedRoomId(roomReference.id);
-      setIsCreatingRoom(false);
-
-      void updateDoc(
-        doc(db, 'rooms', roomReference.id),
-        sanitizeFirestoreData({
-          memberRoles: { [user.uid]: 'owner' },
-          unreadCounts: { [user.uid]: 0 },
-          updatedAt: serverTimestamp(),
-        })
-      ).catch(() => {
-        // The room itself is the important part; metadata can backfill on next activity.
-      });
     } catch (caughtError) {
       setError(
         caughtError instanceof Error ? caughtError.message : 'Room creation failed'
@@ -1819,11 +1915,11 @@ export function ChatApp() {
 
     try {
       await withTimeout(
-        updateDoc(doc(db, 'rooms', selectedRoomId), {
+        updateDocumentViaRest(user!, `rooms/${selectedRoomId}`, {
           name: nextName,
           topic: roomTopicDraft.trim(),
           visibility: channelVisibilityDraft,
-          updatedAt: serverTimestamp(),
+          updatedAt: new Date(),
         }),
         12000,
         'Saving room details timed out. Please try again.'
@@ -2084,16 +2180,17 @@ export function ChatApp() {
 
         const nextMemberShape = createMemberShape(roomForWrite, user.uid, selfName, 'member');
 
-        await updateDoc(
-          doc(db, 'rooms', selectedRoomId),
-          sanitizeFirestoreData({
+        await withTimeout(
+          updateDocumentViaRest(user, `rooms/${selectedRoomId}`, {
             ...nextMemberShape,
             unreadCounts: {
               ...(roomForWrite.unreadCounts || {}),
               [user.uid]: 0,
             },
-            updatedAt: serverTimestamp(),
-          })
+            updatedAt: new Date(),
+          }),
+          12000,
+          'Joining the channel timed out. Please try again.'
         );
 
         roomForWrite = {
@@ -2110,7 +2207,7 @@ export function ChatApp() {
         text: trimmedText,
         senderId: user.uid,
         senderName: selfName,
-        createdAt: serverTimestamp(),
+        createdAt: new Date(),
       };
 
       if (attachmentName) {
@@ -2128,8 +2225,9 @@ export function ChatApp() {
       }
 
       const messageReference = await withTimeout(
-        addDoc(
-          collection(db, 'rooms', selectedRoomId, 'messages'),
+        createDocumentViaRest(
+          user,
+          `rooms/${selectedRoomId}/messages`,
           sanitizeFirestoreData(messagePayload)
         ),
         12000,
@@ -2153,23 +2251,20 @@ export function ChatApp() {
       });
 
       try {
-        await updateDoc(
-          doc(db, 'rooms', selectedRoomId),
-          sanitizeFirestoreData({
-            lastMessageText:
-              trimmedText ||
-              (attachmentName
-                ? threadParent
-                  ? `Reply with ${attachmentName}`
-                  : `Sent ${attachmentName}`
-                : threadParent
-                  ? `Reply: ${threadParent.text || 'thread update'}`
-                  : ''),
-            lastMessageSenderId: user.uid,
-            unreadCounts: nextUnreadCounts,
-            updatedAt: serverTimestamp(),
-          })
-        );
+        await updateDocumentViaRest(user, `rooms/${selectedRoomId}`, {
+          lastMessageText:
+            trimmedText ||
+            (attachmentName
+              ? threadParent
+                ? `Reply with ${attachmentName}`
+                : `Sent ${attachmentName}`
+              : threadParent
+                ? `Reply: ${threadParent.text || 'thread update'}`
+                : ''),
+          lastMessageSenderId: user.uid,
+          unreadCounts: nextUnreadCounts,
+          updatedAt: new Date(),
+        });
       } catch {
         // Keep the message even if room metadata cannot be refreshed right now.
       }
