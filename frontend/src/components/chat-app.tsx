@@ -396,6 +396,22 @@ const getRoomRoleForUser = (room: Room | null, userId?: string | null) => {
   return '';
 };
 
+const canUserAccessRoom = (room: Room, userId?: string | null) => {
+  if (!userId) {
+    return false;
+  }
+
+  if (room.kind === 'direct') {
+    return (room.memberIds || []).includes(userId);
+  }
+
+  if (room.visibility !== 'private') {
+    return true;
+  }
+
+  return getRoomRoleForUser(room, userId) !== '';
+};
+
 function AvatarBadge({
   displayName,
   photoURL,
@@ -638,13 +654,7 @@ export function ChatApp() {
       return [];
     }
 
-    return rooms.filter((room) => {
-      if (room.kind === 'direct') {
-        return (room.memberIds || []).includes(user.uid);
-      }
-
-      return room.visibility !== 'private' || (room.memberIds || []).includes(user.uid);
-    });
+    return rooms.filter((room) => canUserAccessRoom(room, user.uid));
   }, [rooms, user]);
 
   useEffect(() => {
@@ -1082,7 +1092,7 @@ export function ChatApp() {
   const isSelectedRoomMember = Boolean(
     selectedRoom?.kind !== 'channel' ||
       !user ||
-      (selectedRoom.memberIds || []).includes(user.uid)
+      getRoomRoleForUser(selectedRoom, user.uid) !== ''
   );
 
   const selectedRoomMembers = useMemo(() => {
